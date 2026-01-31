@@ -1,0 +1,11 @@
+{
+  "name": "DevOps Sync",
+  "id": "devops-sync-figma-plugin",
+  "api": "1.0.0",
+  "main": "dist/main.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["*"]
+  }
+}

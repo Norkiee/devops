@@ -1,0 +1,58 @@
+import React, { useState } from 'react';
+import { FrameData } from '../types';
+import { Button } from '../components/Button';
+import { Input } from '../components/Input';
+import { FrameChip } from '../components/FrameChip';
+
+interface ContextScreenProps {
+  frames: FrameData[];
+  onGenerate: (context?: string) => void;
+}
+
+export function ContextScreen({
+  frames,
+  onGenerate,
+}: ContextScreenProps): React.ReactElement {
+  const [context, setContext] = useState('');
+
+  return (
+    <div className="screen">
+      <div className="screen-header">
+        <h2>Add Context</h2>
+        <p>Help AI generate better task descriptions</p>
+      </div>
+
+      <div className="frame-chips">
+        {frames.map((frame) => (
+          <FrameChip key={frame.id} name={frame.name} />
+        ))}
+      </div>
+
+      <Input
+        label="Context (optional)"
+        value={context}
+        onChange={setContext}
+        placeholder="e.g., User onboarding flow for mobile app"
+        multiline
+        rows={3}
+      />
+
+      <div className="screen-footer">
+        <Button
+          onClick={() => onGenerate(context || undefined)}
+          fullWidth
+        >
+          Generate Tasks
+        </Button>
+        <div style={{ textAlign: 'center', marginTop: '8px' }}>
+          <button
+            className="link-button"
+            onClick={() => onGenerate(undefined)}
+          >
+            Skip context, generate anyway
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
