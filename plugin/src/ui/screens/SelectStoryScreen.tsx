@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { AzureProject, AzureStory } from '../types';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
-import { Input } from '../components/Input';
 import { Tag } from '../components/Tag';
-import { fetchProjects, fetchStories, fetchTags } from '../services/api';
+import { fetchOrgs, fetchProjects, fetchStories, fetchTags } from '../services/api';
 
 interface SelectStoryScreenProps {
   accessToken: string;
@@ -31,6 +30,7 @@ export function SelectStoryScreen({
   savedFrequentTags,
   onContinue,
 }: SelectStoryScreenProps): React.ReactElement {
+  const [orgs, setOrgs] = useState<string[]>([]);
   const [org, setOrg] = useState(savedOrg || '');
   const [projects, setProjects] = useState<AzureProject[]>([]);
   const [projectId, setProjectId] = useState(savedProjectId || '');
@@ -43,8 +43,31 @@ export function SelectStoryScreen({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Auto-fetch organizations on mount
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    fetchOrgs(accessToken)
+      .then((fetchedOrgs) => {
+        setOrgs(fetchedOrgs);
+        // Auto-select if there's a saved org or only one org
+        if (savedOrg && fetchedOrgs.includes(savedOrg)) {
+          setOrg(savedOrg);
+        } else if (fetchedOrgs.length === 1) {
+          setOrg(fetchedOrgs[0]);
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [accessToken, savedOrg]);
+
+  // Fetch projects when org changes
   useEffect(() => {
     if (!org) return;
+    setProjects([]);
+    setProjectId('');
+    setStories([]);
+    setStoryId('');
     setLoading(true);
     setError('');
     fetchProjects(accessToken, org)
@@ -53,8 +76,11 @@ export function SelectStoryScreen({
       .finally(() => setLoading(false));
   }, [accessToken, org]);
 
+  // Fetch stories and tags when project changes
   useEffect(() => {
     if (!org || !projectId) return;
+    setStories([]);
+    setStoryId('');
     setLoading(true);
     setError('');
     Promise.all([
@@ -91,11 +117,12 @@ export function SelectStoryScreen({
       {error && <div className="error-message">{error}</div>}
 
       <div className="select-group">
-        <Input
+        <Select
           label="Organization"
           value={org}
           onChange={setOrg}
-          placeholder="e.g., my-org"
+          placeholder={loading && orgs.length === 0 ? 'Loading...' : 'Select an organization'}
+          options={orgs.map((o) => ({ value: o, label: o }))}
         />
 
         <Select
@@ -103,7 +130,7 @@ export function SelectStoryScreen({
           value={projectId}
           onChange={setProjectId}
           placeholder={
-            loading ? 'Loading...' : 'Select a project'
+            !org ? 'Select an organization first' : loading ? 'Loading...' : 'Select a project'
           }
           options={projects.map((p) => ({ value: p.id, label: p.name }))}
         />
@@ -113,7 +140,7 @@ export function SelectStoryScreen({
           value={storyId}
           onChange={setStoryId}
           placeholder={
-            loading ? 'Loading...' : 'Select a user story'
+            !projectId ? 'Select a project first' : loading ? 'Loading...' : 'Select a user story'
           }
           options={stories.map((s) => ({
             value: s.id.toString(),

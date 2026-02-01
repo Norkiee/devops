@@ -29,7 +29,26 @@ async function azureFetch(
   return response;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function listOrganizations(
+  accessToken: string
+): Promise<string[]> {
+  // First get the user's profile to get their member ID
+  const profileResponse = await azureFetch(
+    'https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1',
+    accessToken
+  );
+  const profile = (await profileResponse.json()) as { id: string };
+
+  // Then get their organizations using the member ID
+  const accountsResponse = await azureFetch(
+    `https://app.vssps.visualstudio.com/_apis/accounts?memberId=${profile.id}&api-version=7.1`,
+    accessToken
+  );
+  const accounts = (await accountsResponse.json()) as {
+    value: Array<{ accountName: string }>;
+  };
+  return accounts.value.map((a) => a.accountName);
+}
 
 export async function listProjects(
   opts: AzureApiOptions

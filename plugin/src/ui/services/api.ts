@@ -76,6 +76,16 @@ export async function refreshToken(
   return data.accessToken;
 }
 
+export async function fetchOrgs(
+  accessToken: string
+): Promise<string[]> {
+  const data = await request<{ orgs: string[] }>(
+    '/api/azure/orgs',
+    { headers: authHeaders(accessToken) }
+  );
+  return data.orgs;
+}
+
 export async function fetchProjects(
   accessToken: string,
   org: string
