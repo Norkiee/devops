@@ -7,7 +7,7 @@ import {
   TaskToSubmit,
 } from '../types';
 
-const API_URL = 'https://your-project.vercel.app';
+const API_URL = 'https://devops-psi.vercel.app';
 
 async function request<T>(
   path: string,
