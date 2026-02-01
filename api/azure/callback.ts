@@ -40,7 +40,7 @@ export default async function handler(
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
       console.error('Token exchange failed:', errorData);
-      res.status(500).send('Token exchange failed');
+      res.status(500).send(`Token exchange failed: ${errorData}`);
       return;
     }
 
