@@ -5,7 +5,7 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  const { code, error, error_description } = req.query;
+  const { code, state, error, error_description } = req.query;
 
   if (error) {
     console.error('OAuth error:', error, error_description);
@@ -15,6 +15,11 @@ export default async function handler(
 
   if (!code || typeof code !== 'string') {
     res.status(400).json({ error: 'No code provided' });
+    return;
+  }
+
+  if (!state || typeof state !== 'string') {
+    res.status(400).json({ error: 'No state provided' });
     return;
   }
 
@@ -52,6 +57,8 @@ export default async function handler(
 
     const { randomUUID } = await import('crypto');
     const sessionId = randomUUID();
+
+    // Store refresh token for long-term session
     await kvSet(
       `session:${sessionId}`,
       {
@@ -61,19 +68,21 @@ export default async function handler(
       60 * 60 * 24 * 30
     );
 
+    // Store auth result keyed by state so the plugin can poll for it
+    await kvSet(
+      `auth:${state}`,
+      {
+        sessionId,
+        accessToken: tokens.access_token,
+      },
+      60 * 5 // expires in 5 minutes
+    );
+
     res.setHeader('Content-Type', 'text/html');
     res.send(`<!DOCTYPE html>
 <html>
   <body>
-    <script>
-      window.opener.postMessage({
-        type: 'azure-auth-success',
-        sessionId: '${sessionId}',
-        accessToken: '${tokens.access_token}'
-      }, '*');
-      window.close();
-    </script>
-    <p>Authentication successful. You can close this window.</p>
+    <p>Authentication successful! You can close this window and return to Figma.</p>
   </body>
 </html>`);
   } catch (err) {

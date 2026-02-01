@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleCors } from '../_lib/auth';
 
@@ -8,8 +7,13 @@ export default function handler(
 ): void {
   if (handleCors(req, res)) return;
 
+  const state = req.query.state;
+  if (!state || typeof state !== 'string') {
+    res.status(400).json({ error: 'Missing state parameter' });
+    return;
+  }
+
   const tenantId = process.env.AZURE_TENANT_ID || 'common';
-  const state = randomUUID();
 
   const params = new URLSearchParams({
     client_id: process.env.AZURE_CLIENT_ID!,

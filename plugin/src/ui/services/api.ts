@@ -44,8 +44,23 @@ export async function generateTasks(
   return data.tasks;
 }
 
-export function getAuthUrl(): string {
-  return `${API_URL}/api/azure/auth`;
+export function getAuthUrl(state: string): string {
+  return `${API_URL}/api/azure/auth?state=${encodeURIComponent(state)}`;
+}
+
+export async function pollAuthResult(
+  state: string
+): Promise<{ sessionId: string; accessToken: string } | null> {
+  const data = await request<{
+    status: string;
+    sessionId?: string;
+    accessToken?: string;
+  }>(`/api/azure/poll?state=${encodeURIComponent(state)}`);
+
+  if (data.status === 'complete' && data.sessionId && data.accessToken) {
+    return { sessionId: data.sessionId, accessToken: data.accessToken };
+  }
+  return null;
 }
 
 export async function refreshToken(
