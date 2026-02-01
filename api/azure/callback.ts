@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { kvSet } from '../_lib/redis';
 
 export default async function handler(
   req: VercelRequest,
@@ -52,13 +52,13 @@ export default async function handler(
 
     const { randomUUID } = await import('crypto');
     const sessionId = randomUUID();
-    await kv.set(
+    await kvSet(
       `session:${sessionId}`,
       {
         refreshToken: tokens.refresh_token,
         expiresAt: Date.now() + tokens.expires_in * 1000,
       },
-      { ex: 60 * 60 * 24 * 30 }
+      60 * 60 * 24 * 30
     );
 
     res.setHeader('Content-Type', 'text/html');

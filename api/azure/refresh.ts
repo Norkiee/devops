@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { kvGet, kvSet, kvDel } from '../_lib/redis';
 import { KVSession } from '../_lib/types';
 import { handleCors } from '../_lib/auth';
 
@@ -22,7 +22,7 @@ export default async function handler(
   }
 
   try {
-    const session = await kv.get<KVSession>(`session:${sessionId}`);
+    const session = await kvGet<KVSession>(`session:${sessionId}`);
 
     if (!session?.refreshToken) {
       res
@@ -49,7 +49,7 @@ export default async function handler(
     );
 
     if (!tokenResponse.ok) {
-      await kv.del(`session:${sessionId}`);
+      await kvDel(`session:${sessionId}`);
       res
         .status(401)
         .json({ error: 'Refresh failed, please re-authenticate' });
@@ -62,13 +62,13 @@ export default async function handler(
       expires_in: number;
     };
 
-    await kv.set(
+    await kvSet(
       `session:${sessionId}`,
       {
         refreshToken: tokens.refresh_token,
         expiresAt: Date.now() + tokens.expires_in * 1000,
       },
-      { ex: 60 * 60 * 24 * 30 }
+      60 * 60 * 24 * 30
     );
 
     res.status(200).json({ accessToken: tokens.access_token });
