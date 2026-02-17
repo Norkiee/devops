@@ -88,7 +88,7 @@ function getSelectedFrames(): FrameData[] {
     .map(buildFrameData);
 }
 
-figma.showUI(__html__, { width: 320, height: 520 });
+figma.showUI(__html__, { width: 400, height: 520 });
 
 figma.ui.onmessage = async (msg: { type: string; data?: unknown }) => {
   if (msg.type === 'get-selection') {
