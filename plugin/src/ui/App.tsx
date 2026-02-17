@@ -10,6 +10,7 @@ import {
 import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
+import { useAutoResize } from './hooks/useAutoResize';
 import { generateTasks, createTasks } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ContextScreen } from './screens/ContextScreen';
@@ -28,6 +29,7 @@ export function App(): React.ReactElement {
   const { frames, frameCount, requestFrames } = useFrameSelection();
   const auth = useAzureAuth();
   const { storage, updateStorage } = usePluginStorage();
+  const containerRef = useAutoResize();
 
   const [frameTasks, setFrameTasks] = useState<FrameTasks[]>([]);
   const [completedFrameIds, setCompletedFrameIds] = useState<Set<string>>(
@@ -257,7 +259,7 @@ export function App(): React.ReactElement {
   );
 
   return (
-    <div className="plugin-container">
+    <div className="plugin-container" ref={containerRef}>
       {error && screen !== 'generating' && screen !== 'submitting' && (
         <div className="error-message">{error}</div>
       )}

@@ -90,7 +90,7 @@ function getSelectedFrames(): FrameData[] {
 
 figma.showUI(__html__, { width: 400, height: 520 });
 
-figma.ui.onmessage = async (msg: { type: string; data?: unknown }) => {
+figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number }) => {
   if (msg.type === 'get-selection') {
     const frames = getSelectedFrames();
     figma.ui.postMessage({ type: 'selection', frames });
@@ -103,6 +103,11 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown }) => {
 
   if (msg.type === 'set-storage') {
     await figma.clientStorage.setAsync('devops-sync', msg.data);
+  }
+
+  if (msg.type === 'resize') {
+    const height = Math.min(Math.max(msg.height || 200, 200), 800);
+    figma.ui.resize(400, height);
   }
 };
 
