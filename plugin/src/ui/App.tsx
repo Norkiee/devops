@@ -284,8 +284,9 @@ export function App(): React.ReactElement {
 
       {screen === 'connect-azure' && (
         <ConnectAzureScreen
-          tasks={flatTasksForDisplay}
+          frameTasks={frameTasks}
           isAuthenticated={auth.isAuthenticated}
+          onTaskToggle={handleTaskToggle}
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-story')}
         />
