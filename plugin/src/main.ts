@@ -3,59 +3,92 @@ interface FrameData {
   name: string;
   textContent: string[];
   componentNames: string[];
+  nestedFrameNames: string[];
   width: number;
   height: number;
 }
 
 function extractTextContent(node: SceneNode): string[] {
-  const texts: string[] = [];
+  const textContent: string[] = [];
 
-  if (node.type === 'TEXT') {
-    texts.push(node.characters);
-  }
-
-  if ('children' in node) {
-    for (const child of node.children) {
-      texts.push(...extractTextContent(child));
+  function traverse(n: SceneNode) {
+    if (n.type === 'TEXT') {
+      const text = n.characters.trim();
+      if (text && text.length > 1 && !textContent.includes(text)) {
+        textContent.push(text);
+      }
+    }
+    if ('children' in n) {
+      n.children.forEach(traverse);
     }
   }
 
-  return texts;
+  traverse(node);
+  return textContent.slice(0, 30);
 }
 
 function extractComponentNames(node: SceneNode): string[] {
-  const names: string[] = [];
+  const componentNames: string[] = [];
 
-  if (node.type === 'INSTANCE') {
-    const mainComponent = node.mainComponent;
-    if (mainComponent) {
-      names.push(mainComponent.name);
+  function traverse(n: SceneNode) {
+    if (n.type === 'INSTANCE') {
+      const name = n.name;
+      if (name && !name.match(/^(Frame|Group|Rectangle|Ellipse)\s*\d*$/i)) {
+        if (!componentNames.includes(name)) {
+          componentNames.push(name);
+        }
+      }
+    }
+    if ('children' in n) {
+      n.children.forEach(traverse);
     }
   }
 
-  if ('children' in node) {
-    for (const child of node.children) {
-      names.push(...extractComponentNames(child));
+  traverse(node);
+  return componentNames.slice(0, 20);
+}
+
+function extractNestedFrameNames(node: SceneNode): string[] {
+  const frameNames: string[] = [];
+
+  function traverse(n: SceneNode, depth: number) {
+    if (depth > 2) return;
+    if (n.type === 'FRAME' && n !== node) {
+      const name = n.name;
+      if (name && !name.match(/^Frame\s*\d*$/i)) {
+        if (!frameNames.includes(name)) {
+          frameNames.push(name);
+        }
+      }
+    }
+    if ('children' in n) {
+      n.children.forEach((child) => traverse(child, depth + 1));
     }
   }
 
-  return names;
+  traverse(node, 0);
+  return frameNames.slice(0, 10);
+}
+
+function buildFrameData(frame: FrameNode): FrameData {
+  return {
+    id: frame.id,
+    name: frame.name,
+    textContent: extractTextContent(frame),
+    componentNames: extractComponentNames(frame),
+    nestedFrameNames: extractNestedFrameNames(frame),
+    width: Math.round(frame.width),
+    height: Math.round(frame.height),
+  };
 }
 
 function getSelectedFrames(): FrameData[] {
   return figma.currentPage.selection
     .filter((node): node is FrameNode => node.type === 'FRAME')
-    .map((frame) => ({
-      id: frame.id,
-      name: frame.name,
-      textContent: extractTextContent(frame),
-      componentNames: extractComponentNames(frame),
-      width: Math.round(frame.width),
-      height: Math.round(frame.height),
-    }));
+    .map(buildFrameData);
 }
 
-figma.showUI(__html__, { width: 400, height: 600 });
+figma.showUI(__html__, { width: 320, height: 520 });
 
 figma.ui.onmessage = async (msg: { type: string; data?: unknown }) => {
   if (msg.type === 'get-selection') {

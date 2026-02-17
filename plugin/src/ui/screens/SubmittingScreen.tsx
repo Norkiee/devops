@@ -4,7 +4,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface SubmittingScreenProps {
   tasks: TaskToSubmit[];
-  completedIndices: Set<number>;
+  completedTaskIds: Set<string>;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -22,7 +22,7 @@ const styles: Record<string, React.CSSProperties> = {
 
 export function SubmittingScreen({
   tasks,
-  completedIndices,
+  completedTaskIds,
 }: SubmittingScreenProps): React.ReactElement {
   return (
     <div className="screen screen-center">
@@ -31,13 +31,13 @@ export function SubmittingScreen({
         sublabel="Pushing to Azure DevOps"
       />
       <div className="progress-list" style={{ marginTop: '16px' }}>
-        {tasks.map((task, index) => (
-          <div key={task.frameId} style={styles.item}>
+        {tasks.map((task) => (
+          <div key={task.taskId} style={styles.item}>
             <span style={styles.icon}>
-              {completedIndices.has(index) ? (
+              {completedTaskIds.has(task.taskId) ? (
                 <span className="success-icon">&#10003;</span>
               ) : (
-                '&#9675;'
+                '○'
               )}
             </span>
             <span>{task.title}</span>

@@ -1,15 +1,24 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { FrameData, GeneratedTask } from './types';
+import { FrameData, FrameTasks, TaskItem } from './types';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, generate a clear, actionable task for developers.
+const SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, analyze the content and generate clear, actionable tasks for developers.
+
+Break down the frame into logical implementation tasks. Generate 1-5 tasks depending on complexity:
+- Simple frames (few elements, single purpose): 1-2 tasks
+- Medium frames (forms, multiple sections): 2-3 tasks
+- Complex frames (dashboards, multi-feature screens): 3-5 tasks
 
 Guidelines:
+- Each task should be independently implementable
 - Task titles should be concise and action-oriented (start with a verb)
 - Descriptions should be 2-3 sentences covering what to build and key considerations
+- Don't create tasks that are too granular (e.g., "Style the submit button" is too small)
+- Don't create tasks that are too broad (e.g., "Build the entire screen")
+- Group related elements into cohesive tasks
 - Focus on implementation details, not design decisions
 - Mention specific UI elements, states, and interactions
 - Do not include estimates or assignees
@@ -17,52 +26,66 @@ Guidelines:
 
 Output JSON format:
 {
-  "title": "string",
-  "description": "string"
+  "tasks": [
+    { "title": "string", "description": "string" },
+    { "title": "string", "description": "string" }
+  ]
 }`;
 
 function buildUserPrompt(frame: FrameData, context?: string): string {
   return `Frame name: ${frame.name}
 Text content found: ${frame.textContent.join(', ') || 'None'}
 Components used: ${frame.componentNames.join(', ') || 'None'}
+Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
 Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate a development task for implementing this design.`;
+Analyze this design frame and generate appropriate development tasks. Consider the complexity and break it down into logical, independently implementable units of work.`;
 }
 
-function parseResponse(text: string): { title: string; description: string } {
+function parseResponse(text: string): Array<{ title: string; description: string }> {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('No JSON found in Claude response');
   }
   const parsed = JSON.parse(jsonMatch[0]);
-  if (!parsed.title || !parsed.description) {
-    throw new Error('Missing title or description in Claude response');
+  if (!parsed.tasks || !Array.isArray(parsed.tasks)) {
+    throw new Error('Missing tasks array in Claude response');
   }
-  return { title: parsed.title, description: parsed.description };
+  return parsed.tasks.map((task: { title?: string; description?: string }) => {
+    if (!task.title || !task.description) {
+      throw new Error('Missing title or description in task');
+    }
+    return { title: task.title, description: task.description };
+  });
 }
 
-export async function generateTaskForFrame(
+export async function generateTasksForFrame(
   frame: FrameData,
   context?: string
-): Promise<GeneratedTask> {
+): Promise<FrameTasks> {
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 500,
+    max_tokens: 1000,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildUserPrompt(frame, context) }],
   });
 
   const responseText =
     message.content[0].type === 'text' ? message.content[0].text : '';
-  const parsed = parseResponse(responseText);
+  const parsedTasks = parseResponse(responseText);
+
+  const tasks: TaskItem[] = parsedTasks.map((task, index) => ({
+    id: `${frame.id}-${index + 1}`,
+    title: task.title,
+    description: task.description,
+    selected: true,
+  }));
 
   return {
     frameId: frame.id,
     frameName: frame.name,
-    title: parsed.title,
-    description: parsed.description,
+    tasks,
   };
 }

@@ -1,6 +1,6 @@
 import {
   FrameData,
-  GeneratedTask,
+  FrameTasks,
   AzureProject,
   AzureStory,
   CreateTaskResult,
@@ -36,12 +36,12 @@ function authHeaders(accessToken: string): Record<string, string> {
 export async function generateTasks(
   frames: FrameData[],
   context?: string
-): Promise<GeneratedTask[]> {
-  const data = await request<{ tasks: GeneratedTask[] }>('/api/generate', {
+): Promise<FrameTasks[]> {
+  const data = await request<{ frameTasks: FrameTasks[] }>('/api/generate', {
     method: 'POST',
     body: JSON.stringify({ frames, context }),
   });
-  return data.tasks;
+  return data.frameTasks;
 }
 
 export function getAuthUrl(state: string): string {
@@ -135,11 +135,11 @@ export async function createTasks(
       body: JSON.stringify({
         projectId,
         tasks: tasks.map((t) => ({
+          taskId: t.taskId,
           title: t.title,
           description: t.description,
           parentStoryId: t.parentStoryId,
           tags: t.tags,
-          state: 'New' as const,
         })),
       }),
     }

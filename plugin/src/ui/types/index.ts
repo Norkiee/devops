@@ -3,15 +3,22 @@ export interface FrameData {
   name: string;
   textContent: string[];
   componentNames: string[];
+  nestedFrameNames: string[];
   width: number;
   height: number;
 }
 
-export interface GeneratedTask {
-  frameId: string;
-  frameName: string;
+export interface TaskItem {
+  id: string;
   title: string;
   description: string;
+  selected: boolean;
+}
+
+export interface FrameTasks {
+  frameId: string;
+  frameName: string;
+  tasks: TaskItem[];
 }
 
 export interface AzureProject {
@@ -26,8 +33,7 @@ export interface AzureStory {
 }
 
 export interface TaskToSubmit {
-  frameId: string;
-  frameName: string;
+  taskId: string;
   title: string;
   description: string;
   tags: string[];
@@ -35,9 +41,9 @@ export interface TaskToSubmit {
 }
 
 export interface CreateTaskResult {
-  frameId: string;
+  taskId: string;
   success: boolean;
-  taskId?: number;
+  azureTaskId?: number;
   taskUrl?: string;
   error?: string;
 }

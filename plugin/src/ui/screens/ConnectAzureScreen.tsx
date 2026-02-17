@@ -1,30 +1,19 @@
 import React from 'react';
-import { GeneratedTask } from '../types';
 import { Button } from '../components/Button';
 
+interface TaskPreview {
+  frameId: string;
+  frameName: string;
+  title: string;
+  description: string;
+}
+
 interface ConnectAzureScreenProps {
-  tasks: GeneratedTask[];
+  tasks: TaskPreview[];
   isAuthenticated: boolean;
   onConnect: () => void;
   onContinue: () => void;
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  badge: {
-    display: 'inline-block',
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: 600,
-    background: '#d4edda',
-    color: '#198754',
-    marginBottom: '8px',
-  },
-  icon: {
-    fontSize: '40px',
-    marginBottom: '8px',
-  },
-};
 
 export function ConnectAzureScreen({
   tasks,
@@ -33,31 +22,31 @@ export function ConnectAzureScreen({
   onContinue,
 }: ConnectAzureScreenProps): React.ReactElement {
   return (
-    <div className="screen screen-center">
-      <div style={styles.icon}>&#9729;</div>
-      <div style={styles.badge}>
-        {tasks.length} task{tasks.length > 1 ? 's' : ''} ready
+    <div className="screen">
+      <div className="screen-header">
+        <div className="success-badge">{tasks.length} tasks ready</div>
+        <h2>
+          {isAuthenticated
+            ? 'Connected to Azure DevOps'
+            : 'Connect to Azure DevOps'}
+        </h2>
+        <p>
+          {isAuthenticated
+            ? 'Continue to assign tasks to a story'
+            : 'Sign in to push tasks to your Azure DevOps board'}
+        </p>
       </div>
-      <h2 style={{ fontSize: '20px', fontWeight: 600 }}>
-        {isAuthenticated
-          ? 'Connected to Azure DevOps'
-          : 'Connect to Azure DevOps'}
-      </h2>
-      <p style={{ fontSize: '12px', color: '#666666' }}>
-        {isAuthenticated
-          ? 'Continue to assign tasks to a story'
-          : 'Sign in to push tasks to your Azure DevOps board'}
-      </p>
 
       <div className="task-preview-list">
-        {tasks.map((task) => (
-          <div key={task.frameId} className="task-preview-item">
-            {task.title}
+        {tasks.map((task, index) => (
+          <div key={`${task.frameId}-${index}`} className="task-preview-item">
+            <span className="task-preview-title">{task.title}</span>
+            <span className="task-preview-frame">{task.frameName}</span>
           </div>
         ))}
       </div>
 
-      <div className="screen-footer" style={{ width: '100%' }}>
+      <div className="screen-footer">
         {isAuthenticated ? (
           <Button onClick={onContinue} fullWidth>
             Continue

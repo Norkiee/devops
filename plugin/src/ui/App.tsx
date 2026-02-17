@@ -2,7 +2,8 @@ import React, { useState, useCallback } from 'react';
 import {
   Screen,
   FrameData,
-  GeneratedTask,
+  FrameTasks,
+  TaskItem,
   TaskToSubmit,
   CreateTaskResult,
 } from './types';
@@ -28,16 +29,16 @@ export function App(): React.ReactElement {
   const auth = useAzureAuth();
   const { storage, updateStorage } = usePluginStorage();
 
-  const [generatedTasks, setGeneratedTasks] = useState<GeneratedTask[]>([]);
+  const [frameTasks, setFrameTasks] = useState<FrameTasks[]>([]);
   const [completedFrameIds, setCompletedFrameIds] = useState<Set<string>>(
     new Set()
   );
-  const [tasksToSubmit, setTasksToSubmit] = useState<TaskToSubmit[]>([]);
   const [storyTitle, setStoryTitle] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [parentStoryId, setParentStoryId] = useState<number>(0);
   const [azureOrg, setAzureOrg] = useState('');
   const [azureProjectId, setAzureProjectId] = useState('');
-  const [submittedIndices, setSubmittedIndices] = useState<Set<number>>(
+  const [submittedTaskIds, setSubmittedTaskIds] = useState<Set<string>>(
     new Set()
   );
   const [results, setResults] = useState<CreateTaskResult[]>([]);
@@ -54,9 +55,9 @@ export function App(): React.ReactElement {
       setError(null);
 
       try {
-        const tasks = await generateTasks(frames, context);
-        setGeneratedTasks(tasks);
-        setCompletedFrameIds(new Set(tasks.map((t) => t.frameId)));
+        const generatedFrameTasks = await generateTasks(frames, context);
+        setFrameTasks(generatedFrameTasks);
+        setCompletedFrameIds(new Set(generatedFrameTasks.map((ft) => ft.frameId)));
 
         if (auth.isAuthenticated) {
           setScreen('select-story');
@@ -75,6 +76,10 @@ export function App(): React.ReactElement {
     auth.startAuth();
   }, [auth]);
 
+  const getTotalTaskCount = useCallback(() => {
+    return frameTasks.reduce((sum, ft) => sum + ft.tasks.length, 0);
+  }, [frameTasks]);
+
   const handleStorySelected = useCallback(
     (selection: {
       org: string;
@@ -87,6 +92,7 @@ export function App(): React.ReactElement {
       setAzureProjectId(selection.projectId);
       setStoryTitle(selection.storyTitle);
       setSelectedTags(selection.selectedTags);
+      setParentStoryId(selection.storyId);
 
       updateStorage({
         azureOrg: selection.org,
@@ -95,45 +101,76 @@ export function App(): React.ReactElement {
         frequentTags: selection.selectedTags.slice(0, 5),
       });
 
-      const toSubmit: TaskToSubmit[] = generatedTasks.map((task) => ({
-        frameId: task.frameId,
-        frameName: task.frameName,
-        title: task.title,
-        description: task.description,
-        tags: selection.selectedTags,
-        parentStoryId: selection.storyId,
-      }));
-      setTasksToSubmit(toSubmit);
       setScreen('review');
     },
-    [generatedTasks, updateStorage]
+    [updateStorage]
   );
 
-  const handleTaskChange = useCallback(
-    (index: number, updates: Partial<TaskToSubmit>) => {
-      setTasksToSubmit((prev) =>
-        prev.map((task, i) => (i === index ? { ...task, ...updates } : task))
-      );
-    },
-    []
-  );
-
-  const handleRemoveTag = useCallback(
-    (taskIndex: number, tag: string) => {
-      setTasksToSubmit((prev) =>
-        prev.map((task, i) =>
-          i === taskIndex
-            ? { ...task, tags: task.tags.filter((t) => t !== tag) }
-            : task
+  const handleTaskUpdate = useCallback(
+    (frameId: string, taskId: string, updates: Partial<TaskItem>) => {
+      setFrameTasks((prev) =>
+        prev.map((ft) =>
+          ft.frameId === frameId
+            ? {
+                ...ft,
+                tasks: ft.tasks.map((task) =>
+                  task.id === taskId ? { ...task, ...updates } : task
+                ),
+              }
+            : ft
         )
       );
     },
     []
   );
 
+  const handleTaskToggle = useCallback((frameId: string, taskId: string) => {
+    setFrameTasks((prev) =>
+      prev.map((ft) =>
+        ft.frameId === frameId
+          ? {
+              ...ft,
+              tasks: ft.tasks.map((task) =>
+                task.id === taskId ? { ...task, selected: !task.selected } : task
+              ),
+            }
+          : ft
+      )
+    );
+  }, []);
+
+  const handleRemoveTag = useCallback(
+    (frameId: string, taskId: string, tag: string) => {
+      // For now, tags are shared across all tasks, so we remove from selectedTags
+      setSelectedTags((prev) => prev.filter((t) => t !== tag));
+    },
+    []
+  );
+
+  const getSelectedTasks = useCallback((): TaskToSubmit[] => {
+    const tasks: TaskToSubmit[] = [];
+    for (const ft of frameTasks) {
+      for (const task of ft.tasks) {
+        if (task.selected) {
+          tasks.push({
+            taskId: task.id,
+            title: task.title,
+            description: task.description,
+            tags: selectedTags,
+            parentStoryId,
+          });
+        }
+      }
+    }
+    return tasks;
+  }, [frameTasks, selectedTags, parentStoryId]);
+
   const handleSubmit = useCallback(async () => {
+    const tasksToSubmit = getSelectedTasks();
+    if (tasksToSubmit.length === 0) return;
+
     setScreen('submitting');
-    setSubmittedIndices(new Set());
+    setSubmittedTaskIds(new Set());
 
     try {
       const taskResults = await createTasks(
@@ -144,8 +181,8 @@ export function App(): React.ReactElement {
       );
       setResults(taskResults);
 
-      const allIndices = new Set(taskResults.map((_, i) => i));
-      setSubmittedIndices(allIndices);
+      const allTaskIds = new Set(tasksToSubmit.map((t) => t.taskId));
+      setSubmittedTaskIds(allTaskIds);
 
       const allSuccess = taskResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
@@ -153,18 +190,21 @@ export function App(): React.ReactElement {
       setError(err instanceof Error ? err.message : 'Submission failed');
       setScreen('review');
     }
-  }, [auth.accessToken, azureOrg, azureProjectId, tasksToSubmit]);
+  }, [getSelectedTasks, auth.accessToken, azureOrg, azureProjectId]);
 
   const handleRetry = useCallback(async () => {
-    const failedIndices = results
-      .map((r, i) => (!r.success ? i : -1))
-      .filter((i) => i !== -1);
-    const failedTasks = failedIndices.map((i) => tasksToSubmit[i]);
+    const tasksToSubmit = getSelectedTasks();
+    const failedTaskIds = results
+      .filter((r) => !r.success)
+      .map((r) => r.taskId);
+    const failedTasks = tasksToSubmit.filter((t) =>
+      failedTaskIds.includes(t.taskId)
+    );
 
     if (failedTasks.length === 0) return;
 
     setScreen('submitting');
-    setSubmittedIndices(new Set());
+    setSubmittedTaskIds(new Set());
 
     try {
       const retryResults = await createTasks(
@@ -174,14 +214,15 @@ export function App(): React.ReactElement {
         failedTasks
       );
 
-      const updatedResults = [...results];
-      failedIndices.forEach((originalIndex, retryIndex) => {
-        updatedResults[originalIndex] = retryResults[retryIndex];
+      // Merge results
+      const updatedResults = results.map((r) => {
+        const retryResult = retryResults.find((rr) => rr.taskId === r.taskId);
+        return retryResult || r;
       });
       setResults(updatedResults);
 
-      const allIndices = new Set(updatedResults.map((_, i) => i));
-      setSubmittedIndices(allIndices);
+      const allTaskIds = new Set(tasksToSubmit.map((t) => t.taskId));
+      setSubmittedTaskIds(allTaskIds);
 
       const allSuccess = updatedResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
@@ -189,7 +230,7 @@ export function App(): React.ReactElement {
       setError(err instanceof Error ? err.message : 'Retry failed');
       setScreen('partial-failure');
     }
-  }, [results, tasksToSubmit, auth.accessToken, azureOrg, azureProjectId]);
+  }, [results, getSelectedTasks, auth.accessToken, azureOrg, azureProjectId]);
 
   const handleViewInAzure = useCallback(() => {
     const firstSuccess = results.find((r) => r.success && r.taskUrl);
@@ -199,12 +240,21 @@ export function App(): React.ReactElement {
   }, [results]);
 
   const handleCreateMore = useCallback(() => {
-    setGeneratedTasks([]);
-    setTasksToSubmit([]);
+    setFrameTasks([]);
     setResults([]);
     setError(null);
     setScreen('home');
   }, []);
+
+  // Convert frameTasks to flat array for screens that need it
+  const flatTasksForDisplay = frameTasks.flatMap((ft) =>
+    ft.tasks.map((task) => ({
+      frameId: ft.frameId,
+      frameName: ft.frameName,
+      title: task.title,
+      description: task.description,
+    }))
+  );
 
   return (
     <div className="plugin-container">
@@ -232,7 +282,7 @@ export function App(): React.ReactElement {
 
       {screen === 'connect-azure' && (
         <ConnectAzureScreen
-          tasks={generatedTasks}
+          tasks={flatTasksForDisplay}
           isAuthenticated={auth.isAuthenticated}
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-story')}
@@ -242,7 +292,7 @@ export function App(): React.ReactElement {
       {screen === 'select-story' && (
         <SelectStoryScreen
           accessToken={auth.accessToken!}
-          taskCount={generatedTasks.length}
+          taskCount={getTotalTaskCount()}
           savedOrg={storage.azureOrg}
           savedProjectId={storage.azureProjectId}
           savedStoryId={storage.lastStoryId}
@@ -253,9 +303,11 @@ export function App(): React.ReactElement {
 
       {screen === 'review' && (
         <ReviewScreen
-          tasks={tasksToSubmit}
+          frameTasks={frameTasks}
+          selectedTags={selectedTags}
           storyTitle={storyTitle}
-          onTaskChange={handleTaskChange}
+          onTaskUpdate={handleTaskUpdate}
+          onTaskToggle={handleTaskToggle}
           onRemoveTag={handleRemoveTag}
           onSubmit={handleSubmit}
           onBack={() => setScreen('select-story')}
@@ -264,8 +316,8 @@ export function App(): React.ReactElement {
 
       {screen === 'submitting' && (
         <SubmittingScreen
-          tasks={tasksToSubmit}
-          completedIndices={submittedIndices}
+          tasks={getSelectedTasks()}
+          completedTaskIds={submittedTaskIds}
         />
       )}
 

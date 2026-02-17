@@ -67,7 +67,7 @@ export function PartialFailureScreen({
 
       <div className="progress-list" style={{ marginTop: '12px' }}>
         {results.map((result, index) => (
-          <div key={result.frameId || index} style={styles.item}>
+          <div key={result.taskId || index} style={styles.item}>
             <span style={styles.itemIcon}>
               {result.success ? (
                 <span className="success-icon">&#10003;</span>

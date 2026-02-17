@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { generateTaskForFrame } from './_lib/claude';
-import { FrameData, GeneratedTask } from './_lib/types';
+import { generateTasksForFrame } from './_lib/claude';
+import { FrameData, FrameTasks } from './_lib/types';
 import { handleCors } from './_lib/auth';
 
 export default async function handler(
@@ -30,11 +30,11 @@ export default async function handler(
       return;
     }
 
-    const tasks: GeneratedTask[] = await Promise.all(
-      frames.map((frame) => generateTaskForFrame(frame, context))
+    const frameTasks: FrameTasks[] = await Promise.all(
+      frames.map((frame) => generateTasksForFrame(frame, context))
     );
 
-    res.status(200).json({ tasks });
+    res.status(200).json({ frameTasks });
   } catch (error) {
     console.error('Generate error:', error);
     res.status(500).json({ error: 'Failed to generate tasks' });

@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createTask } from '../_lib/azure';
-import { AzureTask, CreateTaskResult } from '../_lib/types';
+import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors } from '../_lib/auth';
 
 export default async function handler(
@@ -19,7 +19,7 @@ export default async function handler(
 
   const { projectId, tasks } = req.body as {
     projectId?: string;
-    tasks?: AzureTask[];
+    tasks?: TaskToCreate[];
   };
 
   if (!projectId || !tasks || !Array.isArray(tasks) || tasks.length === 0) {
@@ -29,7 +29,7 @@ export default async function handler(
 
   try {
     const results: CreateTaskResult[] = await Promise.all(
-      tasks.map(async (task, index) => {
+      tasks.map(async (task) => {
         try {
           const result = await createTask(
             {
@@ -37,17 +37,23 @@ export default async function handler(
               accessToken: auth.accessToken,
               projectId,
             },
-            task
+            {
+              title: task.title,
+              description: task.description,
+              parentStoryId: task.parentStoryId,
+              tags: task.tags,
+              state: 'New',
+            }
           );
           return {
-            frameId: String(index),
+            taskId: task.taskId,
             success: true,
-            taskId: result.id,
+            azureTaskId: result.id,
             taskUrl: result.url,
           };
         } catch (error) {
           return {
-            frameId: String(index),
+            taskId: task.taskId,
             success: false,
             error:
               error instanceof Error
