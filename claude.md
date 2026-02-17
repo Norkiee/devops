@@ -47,7 +47,7 @@ A Figma plugin that:
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    Vercel KV (Redis)                    │    │
+│  │                    Redis (ioredis)                      │    │
 │  │              (OAuth token storage)                      │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
@@ -64,7 +64,6 @@ A Figma plugin that:
 
 - **Serverless**: No server management, auto-scaling
 - **Edge functions**: Low latency for API calls
-- **Vercel KV**: Built-in Redis for token storage
 - **Easy deployment**: Git push to deploy
 - **Free tier**: Sufficient for MVP and small teams
 
@@ -76,8 +75,8 @@ A Figma plugin that:
 | Figma Plugin Logic | TypeScript (main.ts) |
 | Backend | Vercel Serverless Functions (Node.js) |
 | AI | Claude API (claude-sonnet-4-20250514) |
-| Database | Vercel KV (Redis) for token storage |
-| Auth | Azure DevOps OAuth 2.0 |
+| Database | Redis (ioredis) for token storage |
+| Auth | Azure DevOps OAuth 2.0 (polling-based flow) |
 
 ---
 
@@ -130,7 +129,9 @@ devops-sync/
 │   ├── azure/
 │   │   ├── auth.ts            # GET /api/azure/auth
 │   │   ├── callback.ts        # GET /api/azure/callback
+│   │   ├── poll.ts            # GET /api/azure/poll (polling-based OAuth)
 │   │   ├── refresh.ts         # POST /api/azure/refresh
+│   │   ├── orgs.ts            # GET /api/azure/orgs
 │   │   ├── projects.ts        # GET /api/azure/projects
 │   │   ├── stories.ts         # GET /api/azure/stories
 │   │   ├── tags.ts            # GET /api/azure/tags
@@ -139,6 +140,7 @@ devops-sync/
 │       ├── claude.ts          # Claude API wrapper
 │       ├── azure.ts           # Azure DevOps API wrapper
 │       ├── auth.ts            # Token validation helpers
+│       ├── redis.ts           # Redis client wrapper (ioredis)
 │       └── types.ts           # Shared types
 │
 ├── vercel.json                 # Vercel configuration
@@ -214,13 +216,14 @@ interface CreateTaskResult {
 ```typescript
 interface PluginStorage {
   azureProjectId?: string;
-  azureTeamId?: string;
+  azureOrg?: string;          // Selected organization
   lastStoryId?: number;
   frequentTags?: string[];    // Top 5 most used
-  accessToken?: string;       // Encrypted
-  refreshToken?: string;      // Encrypted
+  sessionId?: string;         // Server session ID for token refresh
 }
 ```
+
+> **Note:** Access tokens are stored in memory (React state) for security, not in plugin storage. The `sessionId` is used to refresh tokens via the server.
 
 ---
 
@@ -269,7 +272,38 @@ Initiates Azure DevOps OAuth flow. Redirects to Azure.
 
 #### `GET /api/azure/callback`
 
-OAuth callback. Exchanges code for tokens, stores refresh token, returns access token to plugin.
+OAuth callback. Exchanges code for tokens, stores refresh token in Redis, and stores auth result for polling.
+
+#### `GET /api/azure/poll?state={state}`
+
+Polling endpoint for OAuth completion. The plugin polls this endpoint after opening the OAuth popup.
+
+**Response (pending):**
+```json
+{
+  "status": "pending"
+}
+```
+
+**Response (complete):**
+```json
+{
+  "status": "complete",
+  "sessionId": "uuid",
+  "accessToken": "..."
+}
+```
+
+#### `GET /api/azure/orgs`
+
+Fetch user's Azure DevOps organizations. Auto-fetched on Select Story screen.
+
+**Response:**
+```json
+{
+  "orgs": ["my-org", "another-org"]
+}
+```
 
 #### `GET /api/azure/projects`
 
@@ -428,13 +462,23 @@ Generate a development task for implementing this design.`;
 
 ### api/azure/auth.ts
 
+The plugin generates a unique `state` and passes it as a query parameter. This state is used to correlate the OAuth callback with the polling request.
+
 ```typescript
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { handleCors } from '../_lib/auth';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  const state = crypto.randomUUID();
+export default function handler(req: VercelRequest, res: VercelResponse): void {
+  if (handleCors(req, res)) return;
+
+  const state = req.query.state;
+  if (!state || typeof state !== 'string') {
+    res.status(400).json({ error: 'Missing state parameter' });
+    return;
+  }
+
   const tenantId = process.env.AZURE_TENANT_ID || 'common';
-  
+
   const params = new URLSearchParams({
     client_id: process.env.AZURE_CLIENT_ID!,
     response_type: 'code',
@@ -443,31 +487,45 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     state,
   });
 
-  res.redirect(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params.toString()}`);
+  res.redirect(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params.toString()}`
+  );
 }
 ```
 
 ### api/azure/callback.ts
 
+The callback stores the auth result in Redis keyed by `state`, which the plugin polls for. This avoids cross-origin issues with `window.postMessage` in Figma's plugin environment.
+
 ```typescript
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { kvSet } from '../_lib/redis';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<void> {
   const { code, state, error, error_description } = req.query;
 
   if (error) {
     console.error('OAuth error:', error, error_description);
-    return res.status(400).send(`Authentication failed: ${error_description}`);
+    res.status(400).send(`Authentication failed: ${error_description}`);
+    return;
   }
 
-  if (!code) {
-    return res.status(400).json({ error: 'No code provided' });
+  if (!code || typeof code !== 'string') {
+    res.status(400).json({ error: 'No code provided' });
+    return;
+  }
+
+  if (!state || typeof state !== 'string') {
+    res.status(400).json({ error: 'No state provided' });
+    return;
   }
 
   try {
     const tenantId = process.env.AZURE_TENANT_ID || 'common';
-    
+
     const tokenResponse = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -476,7 +534,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: new URLSearchParams({
           client_id: process.env.AZURE_CLIENT_ID!,
           client_secret: process.env.AZURE_CLIENT_SECRET!,
-          code: code as string,
+          code,
           redirect_uri: process.env.AZURE_REDIRECT_URI!,
           grant_type: 'authorization_code',
           scope: `${process.env.AZURE_DEVOPS_RESOURCE_ID}/.default offline_access`,
@@ -487,38 +545,141 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
       console.error('Token exchange failed:', errorData);
-      return res.status(500).send('Token exchange failed');
+      res.status(500).send(`Token exchange failed: ${errorData}`);
+      return;
     }
 
-    const tokens = await tokenResponse.json();
+    const tokens = (await tokenResponse.json()) as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    };
 
-    // Store refresh token in KV (keyed by a session ID)
-    const sessionId = crypto.randomUUID();
-    await kv.set(`session:${sessionId}`, {
-      refreshToken: tokens.refresh_token,
-      expiresAt: Date.now() + tokens.expires_in * 1000,
-    }, { ex: 60 * 60 * 24 * 30 }); // 30 days
+    const { randomUUID } = await import('crypto');
+    const sessionId = randomUUID();
 
-    // Return HTML that posts message back to Figma plugin
+    // Store refresh token for long-term session (30 days)
+    await kvSet(
+      `session:${sessionId}`,
+      {
+        refreshToken: tokens.refresh_token,
+        expiresAt: Date.now() + tokens.expires_in * 1000,
+      },
+      60 * 60 * 24 * 30
+    );
+
+    // Store auth result keyed by state so the plugin can poll for it (5 min TTL)
+    await kvSet(
+      `auth:${state}`,
+      {
+        sessionId,
+        accessToken: tokens.access_token,
+      },
+      60 * 5
+    );
+
     res.setHeader('Content-Type', 'text/html');
-    res.send(`
-      <html>
-        <body>
-          <script>
-            window.opener.postMessage({
-              type: 'azure-auth-success',
-              sessionId: '${sessionId}',
-              accessToken: '${tokens.access_token}'
-            }, '*');
-            window.close();
-          </script>
-          <p>Authentication successful. You can close this window.</p>
-        </body>
-      </html>
-    `);
+    res.send(`<!DOCTYPE html>
+<html>
+  <body>
+    <p>Authentication successful! You can close this window and return to Figma.</p>
+  </body>
+</html>`);
+  } catch (err) {
+    console.error('OAuth callback error:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).send(`Authentication failed: ${message}`);
+  }
+}
+```
+
+### api/azure/poll.ts
+
+The plugin polls this endpoint to check if OAuth completed.
+
+```typescript
+import { VercelRequest, VercelResponse } from '@vercel/node';
+import { kvGet, kvDel } from '../_lib/redis';
+import { handleCors } from '../_lib/auth';
+
+interface AuthResult {
+  sessionId: string;
+  accessToken: string;
+}
+
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<void> {
+  if (handleCors(req, res)) return;
+
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const state = req.query.state;
+  if (!state || typeof state !== 'string') {
+    res.status(400).json({ error: 'Missing state parameter' });
+    return;
+  }
+
+  try {
+    const result = await kvGet<AuthResult>(`auth:${state}`);
+
+    if (!result) {
+      res.status(200).json({ status: 'pending' });
+      return;
+    }
+
+    // Delete the auth result after reading (one-time use)
+    await kvDel(`auth:${state}`);
+
+    res.status(200).json({
+      status: 'complete',
+      sessionId: result.sessionId,
+      accessToken: result.accessToken,
+    });
+  } catch (err) {
+    console.error('Poll error:', err);
+    res.status(500).json({ error: 'Failed to check auth status' });
+  }
+}
+```
+
+### api/azure/orgs.ts
+
+Fetches user's Azure DevOps organizations.
+
+```typescript
+import { VercelRequest, VercelResponse } from '@vercel/node';
+import { listOrganizations } from '../_lib/azure';
+import { getAccessToken, handleCors } from '../_lib/auth';
+
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<void> {
+  if (handleCors(req, res)) return;
+
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const accessToken = getAccessToken(req);
+  if (!accessToken) {
+    res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    return;
+  }
+
+  try {
+    const orgs = await listOrganizations(accessToken);
+    res.status(200).json({ orgs });
   } catch (error) {
-    console.error('OAuth callback error:', error);
-    res.status(500).send('Authentication failed');
+    console.error('Orgs error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch organizations';
+    res.status(500).json({ error: message });
   }
 }
 ```
@@ -527,28 +688,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 ```typescript
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { kvGet, kvSet, kvDel } from '../_lib/redis';
+import { KVSession } from '../_lib/types';
+import { handleCors } from '../_lib/auth';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<void> {
+  if (handleCors(req, res)) return;
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
-  const { sessionId } = req.body;
+  const { sessionId } = req.body as { sessionId?: string };
 
   if (!sessionId) {
-    return res.status(400).json({ error: 'No session ID provided' });
+    res.status(400).json({ error: 'No session ID provided' });
+    return;
   }
 
   try {
-    const session = await kv.get<{ refreshToken: string }>(`session:${sessionId}`);
-    
+    const session = await kvGet<KVSession>(`session:${sessionId}`);
+
     if (!session?.refreshToken) {
-      return res.status(401).json({ error: 'Session expired, please re-authenticate' });
+      res.status(401).json({ error: 'Session expired, please re-authenticate' });
+      return;
     }
 
     const tenantId = process.env.AZURE_TENANT_ID || 'common';
-    
+
     const tokenResponse = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -565,23 +736,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     if (!tokenResponse.ok) {
-      await kv.del(`session:${sessionId}`);
-      return res.status(401).json({ error: 'Refresh failed, please re-authenticate' });
+      await kvDel(`session:${sessionId}`);
+      res.status(401).json({ error: 'Refresh failed, please re-authenticate' });
+      return;
     }
 
-    const tokens = await tokenResponse.json();
+    const tokens = (await tokenResponse.json()) as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    };
 
-    // Update stored refresh token
-    await kv.set(`session:${sessionId}`, {
-      refreshToken: tokens.refresh_token,
-      expiresAt: Date.now() + tokens.expires_in * 1000,
-    }, { ex: 60 * 60 * 24 * 30 });
+    await kvSet(
+      `session:${sessionId}`,
+      {
+        refreshToken: tokens.refresh_token,
+        expiresAt: Date.now() + tokens.expires_in * 1000,
+      },
+      60 * 60 * 24 * 30
+    );
 
-    return res.status(200).json({ accessToken: tokens.access_token });
+    res.status(200).json({ accessToken: tokens.access_token });
   } catch (error) {
     console.error('Refresh error:', error);
-    return res.status(500).json({ error: 'Failed to refresh token' });
+    res.status(500).json({ error: 'Failed to refresh token' });
   }
+}
+```
+
+### api/_lib/redis.ts
+
+Redis client wrapper using ioredis.
+
+```typescript
+import Redis from 'ioredis';
+
+let client: Redis | null = null;
+
+function getClient(): Redis {
+  if (!client) {
+    const url = process.env.REDIS_URL;
+    if (!url) {
+      throw new Error('Missing REDIS_URL environment variable');
+    }
+    client = new Redis(url);
+  }
+  return client;
+}
+
+export async function kvGet<T>(key: string): Promise<T | null> {
+  const redis = getClient();
+  const value = await redis.get(key);
+  if (!value) return null;
+  return JSON.parse(value) as T;
+}
+
+export async function kvSet(
+  key: string,
+  value: unknown,
+  expirySeconds?: number
+): Promise<void> {
+  const redis = getClient();
+  const serialized = JSON.stringify(value);
+  if (expirySeconds) {
+    await redis.set(key, serialized, 'EX', expirySeconds);
+  } else {
+    await redis.set(key, serialized);
+  }
+}
+
+export async function kvDel(key: string): Promise<void> {
+  const redis = getClient();
+  await redis.del(key);
 }
 ```
 
@@ -757,15 +983,18 @@ Additional context: This is the main dashboard users see after signup
 **Elements:**
 - Heading: "Assign to Story"
 - Subtext: "All X tasks will be linked to this story"
-- Dropdown: Project/Team (pre-filled if remembered)
+- Dropdown: Organization (auto-fetched on mount)
+- Dropdown: Project (pre-filled if remembered)
 - Dropdown: User Story (required, shows active only)
 - Multi-select: Tags (fetched from Azure)
 - Hint showing last used story
 - "Continue to Review" primary button
 
 **Behavior:**
+- Auto-fetch organizations on mount via `/api/azure/orgs`
+- Auto-select org if only one exists, or use saved org
 - Fetch projects, stories, tags from Azure API
-- Pre-fill remembered project/team
+- Pre-fill remembered project/org
 - Require story selection before proceeding
 - Store selections in plugin storage
 - Navigate to Review screen
@@ -944,7 +1173,23 @@ Azure DevOps OAuth is deprecated (April 2025) and will be removed in 2026. New a
 | Tenant ID | App registration → Overview → Directory (tenant) ID |
 | Azure DevOps Resource ID | `499b84ac-1321-427f-aa17-267ca6975798` (constant) |
 
-### OAuth Flow
+### OAuth Flow (Polling-Based)
+
+The plugin uses a **polling-based OAuth flow** instead of `window.postMessage` to avoid cross-origin issues in Figma's plugin environment.
+
+**Flow:**
+```
+1. Plugin generates unique state UUID
+2. Plugin opens popup: GET /api/azure/auth?state={state}
+3. User authenticates with Azure
+4. Azure redirects to: GET /api/azure/callback?code=...&state={state}
+5. Callback exchanges code for tokens
+6. Callback stores result in Redis: auth:{state} (5 min TTL)
+7. Callback shows "Success, close this window" HTML
+8. Plugin polls: GET /api/azure/poll?state={state}
+9. Poll returns { status: 'pending' } or { status: 'complete', sessionId, accessToken }
+10. Plugin stores sessionId for token refresh, accessToken in memory
+```
 
 **Authorization URL:**
 ```
@@ -972,15 +1217,41 @@ client_id={client_id}
 - Use `common` as tenant_id to allow any Azure AD account
 - Scope `499b84ac-1321-427f-aa17-267ca6975798/.default` grants all configured permissions
 - Access tokens expire in ~1 hour; use refresh tokens for long-lived sessions
+- Plugin polls every 2 seconds, stops after 5 minutes (timeout)
 
 ### API Endpoints Used
 
 | Action | Method | Endpoint |
 |--------|--------|----------|
+| Get user profile | GET | `https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1` |
+| List organizations | GET | `https://app.vssps.visualstudio.com/_apis/accounts?memberId={memberId}&api-version=7.1` |
 | List projects | GET | `https://dev.azure.com/{org}/_apis/projects?api-version=7.1` |
 | List work items (stories) | POST | `https://dev.azure.com/{org}/{project}/_apis/wit/wiql?api-version=7.1` |
 | Get tags | GET | `https://dev.azure.com/{org}/{project}/_apis/wit/tags?api-version=7.1` |
 | Create task | POST | `https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$Task?api-version=7.1` |
+
+### Listing User Organizations
+
+```typescript
+export async function listOrganizations(accessToken: string): Promise<string[]> {
+  // First get the user's profile to get their member ID
+  const profileResponse = await azureFetch(
+    'https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1',
+    accessToken
+  );
+  const profile = (await profileResponse.json()) as { id: string };
+
+  // Then get their organizations using the member ID
+  const accountsResponse = await azureFetch(
+    `https://app.vssps.visualstudio.com/_apis/accounts?memberId=${profile.id}&api-version=7.1`,
+    accessToken
+  );
+  const accounts = (await accountsResponse.json()) as {
+    value: Array<{ accountName: string }>;
+  };
+  return accounts.value.map((a) => a.accountName);
+}
+```
 
 ### Creating a Task with Parent Link
 
@@ -1062,7 +1333,9 @@ const createTask = async (task: AzureTask, org: string, projectId: string, acces
 
 ### Security
 
-- Never store Azure access tokens in plugin storage unencrypted
+- Access tokens stored in memory (React state), never in plugin storage
+- Refresh tokens stored server-side in Redis, never exposed to client
+- Session IDs (not tokens) stored in plugin storage for token refresh
 - API keys only in backend environment variables
 - Validate all inputs on backend before processing
 - Rate limit API endpoints
@@ -1096,11 +1369,8 @@ AZURE_REDIRECT_URI=https://your-project.vercel.app/api/azure/callback
 # Azure DevOps Resource ID (constant, do not change)
 AZURE_DEVOPS_RESOURCE_ID=499b84ac-1321-427f-aa17-267ca6975798
 
-# Vercel KV (auto-populated when you add KV storage)
-KV_URL=...
-KV_REST_API_URL=...
-KV_REST_API_TOKEN=...
-KV_REST_API_READ_ONLY_TOKEN=...
+# Redis (for session/token storage)
+REDIS_URL=redis://...                  # Redis connection URL
 ```
 
 ### Local Development
@@ -1114,9 +1384,10 @@ AZURE_CLIENT_SECRET=...
 AZURE_TENANT_ID=common
 AZURE_REDIRECT_URI=http://localhost:3000/api/azure/callback
 AZURE_DEVOPS_RESOURCE_ID=499b84ac-1321-427f-aa17-267ca6975798
+REDIS_URL=redis://localhost:6379
 ```
 
-For local KV, use Vercel CLI: `vercel env pull` to sync environment variables.
+For local development, run Redis locally or use a cloud Redis provider (e.g., Upstash, Redis Cloud).
 
 ---
 
@@ -1168,12 +1439,25 @@ vercel link
 vercel --prod
 ```
 
-### Add Vercel KV Storage
+### Set Up Redis Storage
 
-1. Go to Vercel dashboard → Storage
-2. Create new KV database
-3. Connect to your project
-4. Environment variables auto-populate
+You can use any Redis provider:
+
+**Option 1: Upstash (recommended for Vercel)**
+1. Go to [Upstash](https://upstash.com)
+2. Create a new Redis database
+3. Copy the `REDIS_URL` connection string
+4. Add to Vercel environment variables
+
+**Option 2: Redis Cloud**
+1. Go to [Redis Cloud](https://redis.com/try-free/)
+2. Create a free database
+3. Get the connection URL
+4. Add to Vercel environment variables
+
+**Option 3: Self-hosted**
+1. Run Redis locally or on a server
+2. Use the connection URL format: `redis://username:password@host:port`
 
 ### Local API Development
 
@@ -1211,7 +1495,8 @@ npm run dev
 
 - [ ] Deploy API to Vercel (`vercel --prod`)
 - [ ] Set all environment variables in Vercel dashboard
-- [ ] Add Vercel KV storage
+- [ ] Set up Redis storage (Upstash, Redis Cloud, etc.)
+- [ ] Add `REDIS_URL` to Vercel environment variables
 - [ ] Register app in Azure Portal (Microsoft Entra ID)
 - [ ] Configure API permissions for Azure DevOps
 - [ ] Create client secret and store in Vercel env vars
