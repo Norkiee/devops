@@ -35,9 +35,9 @@ export function GeneratingScreen({
           <div key={frame.id} style={styles.item}>
             <span style={styles.icon}>
               {completedFrameIds.has(frame.id) ? (
-                <span className="success-icon">&#10003;</span>
+                <span className="success-icon">✓</span>
               ) : (
-                '&#9675;'
+                <span>○</span>
               )}
             </span>
             <span>{frame.name}</span>
