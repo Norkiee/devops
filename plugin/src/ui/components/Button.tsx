@@ -10,21 +10,22 @@ interface ButtonProps {
 
 const styles: Record<string, React.CSSProperties> = {
   base: {
-    padding: '8px 16px',
-    borderRadius: '6px',
-    fontSize: '13px',
-    fontWeight: 600,
+    padding: '12px 16px',
+    borderRadius: '10px',
+    fontSize: '14px',
+    fontWeight: 500,
+    fontFamily: "'DM Mono', monospace",
     cursor: 'pointer',
     border: 'none',
     transition: 'background 0.15s',
     lineHeight: '1.4',
   },
   primary: {
-    background: '#0d6efd',
+    background: '#7c3aed',
     color: '#ffffff',
   },
   primaryDisabled: {
-    background: '#b0d0ff',
+    background: '#c4b5fd',
     color: '#ffffff',
     cursor: 'not-allowed',
   },

@@ -159,30 +159,37 @@ devops-sync/
 interface FrameData {
   id: string;
   name: string;
-  textContent: string[];      // Extracted text layers
-  componentNames: string[];   // Component instances used
+  textContent: string[];        // Extracted text layers (max 30)
+  componentNames: string[];     // Component instances used (max 20)
+  nestedFrameNames: string[];   // Named child frames for structure context (max 10)
   width: number;
   height: number;
 }
 
 interface GenerateRequest {
   frames: FrameData[];
-  context?: string;           // Optional user-provided context
+  context?: string;             // Optional user-provided context
 }
 ```
 
 ### Generated Task (Backend → Plugin)
 
 ```typescript
-interface GeneratedTask {
-  frameId: string;
-  frameName: string;
+interface TaskItem {
+  id: string;                  // Unique ID for UI (e.g., "frame123-task1")
   title: string;
   description: string;
+  selected: boolean;           // User can deselect tasks before submission
+}
+
+interface FrameTasks {
+  frameId: string;
+  frameName: string;
+  tasks: TaskItem[];
 }
 
 interface GenerateResponse {
-  tasks: GeneratedTask[];
+  frameTasks: FrameTasks[];
 }
 ```
 
@@ -255,12 +262,30 @@ Generate task drafts from frame data using Claude.
 **Response:**
 ```json
 {
-  "tasks": [
+  "frameTasks": [
     {
       "frameId": "123:456",
       "frameName": "Login Screen",
-      "title": "Implement login screen UI",
-      "description": "Create login form with email and password input fields, primary sign-in button, and forgot password link. Include form validation states and error messaging."
+      "tasks": [
+        {
+          "id": "123:456-1",
+          "title": "Build login form layout",
+          "description": "Create form with email and password input fields, sign-in button, and forgot password link. Ensure proper spacing and alignment.",
+          "selected": true
+        },
+        {
+          "id": "123:456-2",
+          "title": "Implement form validation",
+          "description": "Add client-side validation for email format and required fields. Display inline error messages below each input.",
+          "selected": true
+        },
+        {
+          "id": "123:456-3",
+          "title": "Add forgot password flow",
+          "description": "Implement forgot password link that navigates to password reset screen or opens modal.",
+          "selected": true
+        }
+      ]
     }
   ]
 }
@@ -385,17 +410,26 @@ Create tasks in Azure DevOps.
 ```typescript
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { FrameData, GeneratedTask } from './_lib/types';
+import { FrameData, FrameTasks } from './_lib/types';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, generate a clear, actionable task for developers.
+const SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, analyze the content and generate clear, actionable tasks for developers.
+
+Break down the frame into logical implementation tasks. Generate 1-5 tasks depending on complexity:
+- Simple frames (few elements, single purpose): 1-2 tasks
+- Medium frames (forms, multiple sections): 2-3 tasks  
+- Complex frames (dashboards, multi-feature screens): 3-5 tasks
 
 Guidelines:
+- Each task should be independently implementable
 - Task titles should be concise and action-oriented (start with a verb)
 - Descriptions should be 2-3 sentences covering what to build and key considerations
+- Don't create tasks that are too granular (e.g., "Style the submit button" is too small)
+- Don't create tasks that are too broad (e.g., "Build the entire screen")
+- Group related elements into cohesive tasks
 - Focus on implementation details, not design decisions
 - Mention specific UI elements, states, and interactions
 - Do not include estimates or assignees
@@ -403,8 +437,10 @@ Guidelines:
 
 Output JSON format:
 {
-  "title": "string",
-  "description": "string"
+  "tasks": [
+    { "title": "string", "description": "string" },
+    { "title": "string", "description": "string" }
+  ]
 }`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -419,20 +455,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'No frames provided' });
     }
 
-    const tasks: GeneratedTask[] = await Promise.all(
+    const frameTasks: FrameTasks[] = await Promise.all(
       frames.map(async (frame) => {
         const userPrompt = `Frame name: ${frame.name}
 Text content found: ${frame.textContent.join(', ') || 'None'}
 Components used: ${frame.componentNames.join(', ') || 'None'}
+Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
 Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate a development task for implementing this design.`;
+Analyze this design frame and generate appropriate development tasks. Consider the complexity and break it down into logical, independently implementable units of work.`;
 
         const message = await client.messages.create({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
+          max_tokens: 1000,
           system: SYSTEM_PROMPT,
           messages: [{ role: 'user', content: userPrompt }],
         });
@@ -446,13 +483,17 @@ Generate a development task for implementing this design.`;
         return {
           frameId: frame.id,
           frameName: frame.name,
-          title: parsed.title,
-          description: parsed.description,
+          tasks: parsed.tasks.map((task: { title: string; description: string }, index: number) => ({
+            id: `${frame.id}-${index + 1}`,
+            title: task.title,
+            description: task.description,
+            selected: true,
+          })),
         };
       })
     );
 
-    return res.status(200).json({ tasks });
+    return res.status(200).json({ frameTasks });
   } catch (error) {
     console.error('Generate error:', error);
     return res.status(500).json({ error: 'Failed to generate tasks' });
@@ -819,15 +860,22 @@ export interface FrameData {
   name: string;
   textContent: string[];
   componentNames: string[];
+  nestedFrameNames: string[];
   width: number;
   height: number;
 }
 
-export interface GeneratedTask {
-  frameId: string;
-  frameName: string;
+export interface TaskItem {
+  id: string;
   title: string;
   description: string;
+  selected: boolean;
+}
+
+export interface FrameTasks {
+  frameId: string;
+  frameName: string;
+  tasks: TaskItem[];
 }
 
 export interface AzureTask {
@@ -839,9 +887,9 @@ export interface AzureTask {
 }
 
 export interface CreateTaskResult {
-  frameId: string;
+  taskId: string;
   success: boolean;
-  taskId?: number;
+  azureTaskId?: number;
   taskUrl?: string;
   error?: string;
 }
@@ -854,11 +902,20 @@ export interface CreateTaskResult {
 ### System Prompt
 
 ```
-You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, generate a clear, actionable task for developers.
+You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, analyze the content and generate clear, actionable tasks for developers.
+
+Break down the frame into logical implementation tasks. Generate 1-5 tasks depending on complexity:
+- Simple frames (few elements, single purpose): 1-2 tasks
+- Medium frames (forms, multiple sections): 2-3 tasks  
+- Complex frames (dashboards, multi-feature screens): 3-5 tasks
 
 Guidelines:
+- Each task should be independently implementable
 - Task titles should be concise and action-oriented (start with a verb)
 - Descriptions should be 2-3 sentences covering what to build and key considerations
+- Don't create tasks that are too granular (e.g., "Style the submit button" is too small)
+- Don't create tasks that are too broad (e.g., "Build the entire screen")
+- Group related elements into cohesive tasks
 - Focus on implementation details, not design decisions
 - Mention specific UI elements, states, and interactions
 - Do not include estimates or assignees
@@ -866,8 +923,10 @@ Guidelines:
 
 Output JSON format:
 {
-  "title": "string",
-  "description": "string"
+  "tasks": [
+    { "title": "string", "description": "string" },
+    { "title": "string", "description": "string" }
+  ]
 }
 ```
 
@@ -877,30 +936,73 @@ Output JSON format:
 Frame name: {frameName}
 Text content found: {textContent}
 Components used: {componentNames}
+Nested sections: {nestedFrameNames}
 Dimensions: {width}x{height}
 
 Additional context: {context}
 
-Generate a development task for implementing this design.
+Analyze this design frame and generate appropriate development tasks. Consider the complexity and break it down into logical, independently implementable units of work.
 ```
 
 ### Example Output
 
 **Input:**
 ```
-Frame name: Dashboard - Empty State
-Text content found: ["No projects yet", "Create your first project", "Get Started"]
-Components used: ["Illustration", "Button/Primary", "Text/Heading", "Text/Body"]
-Dimensions: 1440x900
+Frame name: Login Screen
+Text content found: ["Sign In", "Email", "Password", "Forgot password?", "Don't have an account?", "Sign Up", "Or continue with", "Google", "Apple"]
+Components used: ["Input/Email", "Input/Password", "Button/Primary", "Button/Secondary", "Link", "Divider", "Button/Social"]
+Nested sections: ["Form Container", "Social Login Section", "Footer Links"]
+Dimensions: 375x812
 
-Additional context: This is the main dashboard users see after signup
+Additional context: User authentication flow for mobile app
 ```
 
 **Output:**
 ```json
 {
-  "title": "Build empty state view for dashboard",
-  "description": "Implement the empty state displayed when users have no projects. Include illustration, heading, body text, and primary CTA button. Ensure proper vertical centering and responsive behavior for the content block."
+  "tasks": [
+    {
+      "title": "Build login form layout",
+      "description": "Create the main login form with email and password input fields and primary sign-in button. Ensure proper spacing, alignment, and keyboard handling for mobile."
+    },
+    {
+      "title": "Implement form validation and error states",
+      "description": "Add client-side validation for email format and required fields. Display inline error messages and handle authentication errors from the API."
+    },
+    {
+      "title": "Add social sign-in buttons",
+      "description": "Implement Google and Apple sign-in buttons with proper OAuth integration. Include the 'Or continue with' divider section."
+    },
+    {
+      "title": "Add secondary navigation links",
+      "description": "Implement forgot password link (navigates to reset flow) and sign-up link (navigates to registration). Style as text links per design."
+    }
+  ]
+}
+```
+
+**Example 2 - Simple Frame:**
+
+**Input:**
+```
+Frame name: Empty State - No Results
+Text content found: ["No results found", "Try adjusting your search or filters", "Clear filters"]
+Components used: ["Illustration/Empty", "Text/Heading", "Text/Body", "Button/Secondary"]
+Nested sections: ["Content Block"]
+Dimensions: 1440x400
+
+Additional context: Search results page empty state
+```
+
+**Output:**
+```json
+{
+  "tasks": [
+    {
+      "title": "Build empty state component for search results",
+      "description": "Create centered empty state with illustration, heading, body text, and clear filters button. Component should be reusable and accept custom messaging props."
+    }
+  ]
 }
 ```
 
@@ -1004,22 +1106,67 @@ Additional context: This is the main dashboard users see after signup
 **State:** Everything ready, final check
 
 **Elements:**
-- Header: "Review Tasks" with count
-- Subtext: "Edit before pushing to Azure"
-- Scrollable list of task cards, each with:
-  - Frame thumbnail
-  - Frame name label
-  - Editable title input
-  - Editable description textarea
-  - Tag chips (removable)
-  - Linked story (display only)
-- Sticky footer: "Create X Tasks" primary button
+- Header: "Review Tasks" with total count
+- Subtext: "Edit or remove tasks before pushing to Azure"
+- Scrollable list of frame groups, each containing:
+  - Frame header (collapsible):
+    - Frame name
+    - Task count badge (e.g., "3 tasks")
+    - Expand/collapse chevron
+  - Task cards within each frame group:
+    - Checkbox (to select/deselect task)
+    - Editable title input
+    - Editable description textarea
+    - Tag chips (removable per task if needed)
+- Sticky footer:
+  - Task count: "X of Y tasks selected"
+  - "Create X Tasks" primary button
 - "Back" link
+
+**Visual Layout:**
+```
+┌─────────────────────────────────────┐
+│ Review Tasks              12 tasks  │
+│ Edit or remove tasks before pushing │
+├─────────────────────────────────────┤
+│ ▼ Login Screen               (4)    │
+├─────────────────────────────────────┤
+│ ☑ Build login form layout           │
+│   [editable title................]  │
+│   [editable description..........]  │
+│   [UI] [Design] [×]                 │
+├─────────────────────────────────────┤
+│ ☑ Implement form validation         │
+│   [editable title................]  │
+│   [editable description..........]  │
+│   [UI] [Design] [×]                 │
+├─────────────────────────────────────┤
+│ ☐ Add social sign-in buttons        │
+│   (deselected - won't be created)   │
+├─────────────────────────────────────┤
+│ ☑ Add secondary navigation          │
+│   [editable title................]  │
+├─────────────────────────────────────┤
+│ ▶ Dashboard                    (2)  │
+│   (collapsed)                       │
+├─────────────────────────────────────┤
+│ ▼ Settings Page                (3)  │
+├─────────────────────────────────────┤
+│ ...                                 │
+└─────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│ 10 of 12 tasks    [Create 10 Tasks] │
+└─────────────────────────────────────┘
+```
 
 **Behavior:**
 - All fields are editable
+- Unchecking a task excludes it from submission
+- Frame groups are collapsible to manage long lists
 - Removing all tags from a task is allowed
-- On submit, navigate to Submitting screen
+- At least one task must be selected to proceed
+- On submit, only selected tasks are sent to Azure
+- Navigate to Submitting screen
 
 #### Screen 7a: Submitting
 
@@ -1080,19 +1227,92 @@ Figma plugins have two contexts that communicate via messages:
 ### main.ts (has Figma API access)
 
 ```typescript
+import { FrameData } from './types';
+
+// Helper: Extract text content from frame (recursive)
+function extractTextContent(node: SceneNode): string[] {
+  const textContent: string[] = [];
+  
+  function traverse(n: SceneNode) {
+    if (n.type === 'TEXT') {
+      const text = n.characters.trim();
+      // Skip empty, very short, or duplicate text
+      if (text && text.length > 1 && !textContent.includes(text)) {
+        textContent.push(text);
+      }
+    }
+    if ('children' in n) {
+      n.children.forEach(traverse);
+    }
+  }
+  
+  traverse(node);
+  return textContent.slice(0, 30); // Cap to avoid huge payloads
+}
+
+// Helper: Extract component instance names (recursive)
+function extractComponentNames(node: SceneNode): string[] {
+  const componentNames: string[] = [];
+  
+  function traverse(n: SceneNode) {
+    if (n.type === 'INSTANCE') {
+      const name = n.name;
+      // Skip auto-generated names
+      if (name && !name.match(/^(Frame|Group|Rectangle|Ellipse)\s*\d*$/i)) {
+        if (!componentNames.includes(name)) {
+          componentNames.push(name);
+        }
+      }
+    }
+    if ('children' in n) {
+      n.children.forEach(traverse);
+    }
+  }
+  
+  traverse(node);
+  return componentNames.slice(0, 20); // Cap to avoid huge payloads
+}
+
+// Helper: Extract nested frame names (for structure context)
+function extractNestedFrameNames(node: SceneNode): string[] {
+  const frameNames: string[] = [];
+  
+  function traverse(n: SceneNode, depth: number) {
+    if (depth > 2) return; // Only go 2 levels deep
+    if (n.type === 'FRAME' && n !== node) {
+      const name = n.name;
+      if (name && !name.match(/^Frame\s*\d*$/i)) {
+        frameNames.push(name);
+      }
+    }
+    if ('children' in n) {
+      n.children.forEach(child => traverse(child, depth + 1));
+    }
+  }
+  
+  traverse(node, 0);
+  return frameNames.slice(0, 10);
+}
+
+// Build frame data object
+function buildFrameData(frame: FrameNode): FrameData {
+  return {
+    id: frame.id,
+    name: frame.name,
+    textContent: extractTextContent(frame),
+    componentNames: extractComponentNames(frame),
+    nestedFrameNames: extractNestedFrameNames(frame),
+    width: Math.round(frame.width),
+    height: Math.round(frame.height),
+  };
+}
+
 // Listen for UI requests
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'get-selection') {
     const frames = figma.currentPage.selection
-      .filter(node => node.type === 'FRAME')
-      .map(frame => ({
-        id: frame.id,
-        name: frame.name,
-        textContent: extractTextContent(frame),
-        componentNames: extractComponentNames(frame),
-        width: frame.width,
-        height: frame.height,
-      }));
+      .filter((node): node is FrameNode => node.type === 'FRAME')
+      .map(buildFrameData);
     figma.ui.postMessage({ type: 'selection', frames });
   }
   
@@ -1112,6 +1332,9 @@ figma.on('selectionchange', () => {
     .filter(node => node.type === 'FRAME').length;
   figma.ui.postMessage({ type: 'selection-count', count });
 });
+
+// Show plugin UI
+figma.showUI(__html__, { width: 320, height: 520 });
 ```
 
 ### UI (React)
@@ -1127,6 +1350,9 @@ window.onmessage = (event) => {
   const msg = event.data.pluginMessage;
   if (msg.type === 'selection') {
     setFrames(msg.frames);
+  }
+  if (msg.type === 'selection-count') {
+    setFrameCount(msg.count);
   }
 };
 ```
@@ -1292,19 +1518,20 @@ const createTask = async (task: AzureTask, org: string, projectId: string, acces
 ### In Scope
 
 - [x] Figma plugin UI (9 screens)
-- [x] Frame selection and data extraction
+- [x] Frame selection and data extraction (text content, component names, nested frames)
 - [x] Single context field for all frames
 - [x] Claude-powered task generation
-- [x] Azure DevOps OAuth authentication
-- [x] Fetch projects, active stories, tags
+- [x] **Multiple tasks per frame** (AI determines 1-5 tasks based on complexity)
+- [x] Task selection (users can deselect tasks before submission)
+- [x] Azure DevOps OAuth authentication (Microsoft Entra ID, polling-based)
+- [x] Fetch organizations, projects, active stories, tags
 - [x] All tasks link to same story (batch)
 - [x] Task review and editing before submission
 - [x] Partial failure handling with retry
-- [x] Remember last project, team, story, and frequent tags
+- [x] Remember last org, project, story, and frequent tags
 
 ### Out of Scope (MVP)
 
-- Multiple tasks per frame
 - Different stories per task
 - Auto-closing tasks
 - Editing existing Azure tasks
@@ -1533,7 +1760,6 @@ npm run dev
 
 ## Future Enhancements (Post-MVP)
 
-- [ ] Multiple tasks per frame (user specifies count)
 - [ ] Frame thumbnails in review screen
 - [ ] Smart task templates based on frame type
 - [ ] Story-to-screen mapping history
@@ -1541,3 +1767,5 @@ npm run dev
 - [ ] Analytics on design-to-task efficiency
 - [ ] Bulk task grouping options
 - [ ] Integration with Figma comments/annotations
+- [ ] Different stories per task (within same batch)
+- [ ] Drag-and-drop task reordering

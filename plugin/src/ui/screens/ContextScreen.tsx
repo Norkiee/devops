@@ -18,8 +18,8 @@ export function ContextScreen({
   return (
     <div className="screen">
       <div className="screen-header">
-        <h2>Add Context</h2>
-        <p>Help AI generate better task descriptions</p>
+        <h2>Add context</h2>
+        <p>Help AI generate better task generations</p>
       </div>
 
       <div className="frame-chips">
@@ -29,12 +29,12 @@ export function ContextScreen({
       </div>
 
       <Input
-        label="Context (optional)"
+        label="Context(optional)"
         value={context}
         onChange={setContext}
         placeholder="e.g., User onboarding flow for mobile app"
         multiline
-        rows={3}
+        rows={5}
       />
 
       <div className="screen-footer">
@@ -42,7 +42,7 @@ export function ContextScreen({
           onClick={() => onGenerate(context || undefined)}
           fullWidth
         >
-          Generate Tasks
+          Generate tasks
         </Button>
         <div style={{ textAlign: 'center', marginTop: '8px' }}>
           <button

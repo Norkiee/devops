@@ -7,19 +7,27 @@ interface HomeScreenProps {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  icon: {
-    fontSize: '48px',
-    color: '#999999',
-    marginBottom: '8px',
+  iconGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '6px',
+    marginBottom: '12px',
+  },
+  iconSquare: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '5px',
+    border: '2.5px solid #1a1a2e',
   },
   heading: {
     fontSize: '20px',
-    fontWeight: 600,
+    fontWeight: 700,
   },
   subtext: {
-    fontSize: '12px',
-    color: '#666666',
+    fontSize: '13px',
+    color: '#999999',
     maxWidth: '260px',
+    lineHeight: '1.5',
   },
 };
 
@@ -35,23 +43,26 @@ export function HomeScreen({
   }, []);
 
   return (
-    <div className="screen screen-center">
-      <div style={styles.icon}>&#9638;</div>
-      <h2 style={styles.heading}>Select frames to start</h2>
-      <p style={styles.subtext}>
-        Select one or more frames in Figma to generate Azure DevOps tasks
-      </p>
-      <div className="screen-footer" style={{ width: '100%' }}>
-        <Button
-          onClick={onContinue}
-          disabled={frameCount === 0}
-          fullWidth
-        >
-          {frameCount > 0
-            ? `Continue with ${frameCount} frame${frameCount > 1 ? 's' : ''}`
-            : 'Continue'}
-        </Button>
+    <div className="screen" style={{ alignItems: 'center', textAlign: 'center' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+        <div style={styles.iconGrid}>
+          <div style={styles.iconSquare} />
+          <div style={styles.iconSquare} />
+          <div style={styles.iconSquare} />
+          <div style={styles.iconSquare} />
+        </div>
+        <h2 style={styles.heading}>Select frames to start</h2>
+        <p style={styles.subtext}>
+          Select one or more frames in Figma to generate Azure DevOps tasks
+        </p>
       </div>
+      {frameCount > 0 && (
+        <div style={{ width: '100%' }}>
+          <Button onClick={onContinue} fullWidth>
+            Continue with {frameCount} frame{frameCount > 1 ? 's' : ''}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

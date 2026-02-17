@@ -22,8 +22,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#666666',
   },
   input: {
-    padding: '8px 10px',
-    borderRadius: '6px',
+    padding: '10px 12px',
+    borderRadius: '10px',
     border: '1px solid #e0e0e0',
     fontSize: '13px',
     fontFamily: 'inherit',
