@@ -34,7 +34,7 @@
 }
 
 body {
-  font-family: 'DM Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: var(--font-size-md);
   color: var(--color-text);
   background: var(--color-bg);
@@ -127,7 +127,7 @@ body {
   border: none;
   color: var(--color-primary);
   cursor: pointer;
-  font-family: 'DM Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: var(--font-size-sm);
   text-decoration: none;
   padding: 0;
