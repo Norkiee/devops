@@ -61,17 +61,14 @@ export function App(): React.ReactElement {
         setFrameTasks(generatedFrameTasks);
         setCompletedFrameIds(new Set(generatedFrameTasks.map((ft) => ft.frameId)));
 
-        if (auth.isAuthenticated) {
-          setScreen('select-story');
-        } else {
-          setScreen('connect-azure');
-        }
+        // Always show connect screen so users can reconnect if needed
+        setScreen('connect-azure');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Generation failed');
         setScreen('context');
       }
     },
-    [frames, auth.isAuthenticated]
+    [frames]
   );
 
   const handleConnectAzure = useCallback(() => {

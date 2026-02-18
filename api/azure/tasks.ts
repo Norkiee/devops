@@ -53,7 +53,7 @@ export default async function handler(
           };
         } catch (error) {
           // Re-throw auth errors to be handled at top level
-          if (error instanceof AzureAuthError) {
+          if (error instanceof Error && error.name === 'AzureAuthError') {
             throw error;
           }
           return {
@@ -71,7 +71,7 @@ export default async function handler(
     res.status(200).json({ results });
   } catch (error) {
     console.error('Tasks error:', error);
-    if (error instanceof AzureAuthError) {
+    if (error instanceof Error && error.name === 'AzureAuthError') {
       res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
       return;
     }

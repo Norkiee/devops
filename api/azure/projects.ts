@@ -24,7 +24,8 @@ export default async function handler(
     res.status(200).json({ projects });
   } catch (error) {
     console.error('Projects error:', error);
-    if (error instanceof AzureAuthError) {
+    // Check by name since instanceof may not work after bundling
+    if (error instanceof Error && error.name === 'AzureAuthError') {
       res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
       return;
     }

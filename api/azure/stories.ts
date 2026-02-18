@@ -31,7 +31,7 @@ export default async function handler(
     res.status(200).json({ stories });
   } catch (error) {
     console.error('Stories error:', error);
-    if (error instanceof AzureAuthError) {
+    if (error instanceof Error && error.name === 'AzureAuthError') {
       res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
       return;
     }
