@@ -60,7 +60,7 @@ export function SelectStoryScreen({
         }
       })
       .catch((err) => {
-        if (err instanceof AuthError) {
+        if (err instanceof Error && err.name === 'AuthError') {
           onSessionExpired();
         } else {
           setError(err.message);
@@ -81,7 +81,7 @@ export function SelectStoryScreen({
     fetchProjects(accessToken, org)
       .then(setProjects)
       .catch((err) => {
-        if (err instanceof AuthError) {
+        if (err instanceof Error && err.name === 'AuthError') {
           onSessionExpired();
         } else {
           setError(err.message);
@@ -106,7 +106,7 @@ export function SelectStoryScreen({
         setAvailableTags(fetchedTags);
       })
       .catch((err) => {
-        if (err instanceof AuthError) {
+        if (err instanceof Error && err.name === 'AuthError') {
           onSessionExpired();
         } else {
           setError(err.message);

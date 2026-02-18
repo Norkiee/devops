@@ -34,7 +34,7 @@
 }
 
 body {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: var(--font-size-md);
   color: var(--color-text);
   background: var(--color-bg);
@@ -79,7 +79,7 @@ body {
 
 .screen-footer {
   margin-top: auto;
-  padding-top: var(--spacing-md);
+  padding-top: var(--spacing-sm);
 }
 
 .frame-chips {
@@ -127,7 +127,7 @@ body {
   border: none;
   color: var(--color-primary);
   cursor: pointer;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: inherit;
   font-size: var(--font-size-sm);
   text-decoration: none;
   padding: 0;

@@ -14,7 +14,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '10px',
     fontSize: '14px',
     fontWeight: 500,
-    fontFamily: "'DM Mono', monospace",
+    fontFamily: "'General Sans', -apple-system, BlinkMacSystemFont, sans-serif",
     cursor: 'pointer',
     border: 'none',
     transition: 'background 0.15s',

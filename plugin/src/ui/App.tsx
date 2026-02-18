@@ -194,7 +194,7 @@ export function App(): React.ReactElement {
       const allSuccess = taskResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
     } catch (err) {
-      if (err instanceof AuthError) {
+      if (err instanceof Error && err.name === 'AuthError') {
         handleSessionExpired();
       } else {
         setError(err instanceof Error ? err.message : 'Submission failed');
@@ -238,7 +238,7 @@ export function App(): React.ReactElement {
       const allSuccess = updatedResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
     } catch (err) {
-      if (err instanceof AuthError) {
+      if (err instanceof Error && err.name === 'AuthError') {
         handleSessionExpired();
       } else {
         setError(err instanceof Error ? err.message : 'Retry failed');

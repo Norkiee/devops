@@ -80,9 +80,9 @@ export function useAzureAuth(): UseAzureAuthResult {
             accessToken: result.accessToken,
             sessionId: result.sessionId,
           });
-          // Call completion callback to trigger navigation
+          // Call completion callback after a short delay to ensure state has propagated
           if (onComplete) {
-            onComplete();
+            setTimeout(onComplete, 100);
           }
         }
       } catch {
