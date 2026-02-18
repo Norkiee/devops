@@ -1,9 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { FrameData, FrameTasks, TaskItem } from './types';
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
 
 const SYSTEM_PROMPT = `You are a design task generator for UI/UX work. Given information about a design frame from Figma, analyze the content and generate clear, actionable design tasks.
 
@@ -65,15 +60,37 @@ export async function generateTasksForFrame(
   frame: FrameData,
   context?: string
 ): Promise<FrameTasks> {
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1000,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: buildUserPrompt(frame, context) }],
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+  }
+
+  // Use fetch directly instead of SDK
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildUserPrompt(frame, context) }],
+    }),
   });
 
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    content: Array<{ type: string; text?: string }>;
+  };
   const responseText =
-    message.content[0].type === 'text' ? message.content[0].text : '';
+    data.content[0].type === 'text' ? data.content[0].text || '' : '';
   const parsedTasks = parseResponse(responseText);
 
   const tasks: TaskItem[] = parsedTasks.map((task, index) => ({

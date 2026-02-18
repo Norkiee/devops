@@ -7,11 +7,13 @@ import { FrameChip } from '../components/FrameChip';
 interface ContextScreenProps {
   frames: FrameData[];
   onGenerate: (context?: string) => void;
+  onBack: () => void;
 }
 
 export function ContextScreen({
   frames,
   onGenerate,
+  onBack,
 }: ContextScreenProps): React.ReactElement {
   const [context, setContext] = useState('');
 
@@ -43,6 +45,9 @@ export function ContextScreen({
           fullWidth
         >
           Generate tasks
+        </Button>
+        <Button onClick={onBack} variant="text" fullWidth>
+          Back
         </Button>
       </div>
     </div>

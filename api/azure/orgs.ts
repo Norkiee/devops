@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { listOrganizations, AzureAuthError } from '../_lib/azure';
-import { getAccessToken, handleCors } from '../_lib/auth';
+import { listOrganizations } from '../_lib/azure';
+import { getAccessToken, handleCors, isAzureAuthError } from '../_lib/auth';
 
 export default async function handler(
   req: VercelRequest,
@@ -24,8 +24,7 @@ export default async function handler(
     res.status(200).json({ orgs });
   } catch (error) {
     console.error('Orgs error:', error);
-    // Check by name since instanceof may not work after bundling
-    if (error instanceof Error && error.name === 'AzureAuthError') {
+    if (isAzureAuthError(error)) {
       res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
       return;
     }

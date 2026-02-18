@@ -1,5 +1,20 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 
+// Check if an error is an Azure auth error (works after bundling)
+export function isAzureAuthError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  // Check error name (set by AzureAuthError class)
+  if (error.name === 'AzureAuthError') return true;
+  // Also check message for common auth patterns
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('authentication failed') ||
+    msg.includes('unauthorized') ||
+    msg.includes('token expired') ||
+    msg.includes('invalid token')
+  );
+}
+
 export function getAccessToken(req: VercelRequest): string | null {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

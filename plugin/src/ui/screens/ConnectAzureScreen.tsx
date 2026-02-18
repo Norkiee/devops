@@ -8,6 +8,7 @@ interface ConnectAzureScreenProps {
   onTaskToggle: (frameId: string, taskId: string) => void;
   onConnect: () => void;
   onContinue: () => void;
+  onBack: () => void;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -51,13 +52,12 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column' as const,
     gap: '4px',
     marginTop: '6px',
-    paddingLeft: '8px',
   },
   taskItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '8px 12px',
+    padding: '8px 8px',
     backgroundColor: '#ffffff',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
@@ -66,7 +66,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '8px 12px',
+    padding: '8px 8px',
     backgroundColor: '#f9f9f9',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
@@ -76,6 +76,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: '16px',
     height: '16px',
     cursor: 'pointer',
+    accentColor: '#7c3aed',
+    borderRadius: '4px',
   },
   taskTitle: {
     fontSize: '12px',
@@ -106,6 +108,7 @@ export function ConnectAzureScreen({
   onTaskToggle,
   onConnect,
   onContinue,
+  onBack,
 }: ConnectAzureScreenProps): React.ReactElement {
   const [expandedFrames, setExpandedFrames] = useState<Set<string>>(
     new Set(frameTasks.map((ft) => ft.frameId))
@@ -208,6 +211,9 @@ export function ConnectAzureScreen({
               Continue with existing session
             </Button>
           )}
+          <Button onClick={onBack} variant="text" fullWidth>
+            Back
+          </Button>
         </div>
       </div>
     </div>

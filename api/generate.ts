@@ -37,6 +37,7 @@ export default async function handler(
     res.status(200).json({ frameTasks });
   } catch (error) {
     console.error('Generate error:', error);
-    res.status(500).json({ error: 'Failed to generate tasks' });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: `Failed to generate tasks: ${message}` });
   }
 }

@@ -20,6 +20,7 @@ interface SelectStoryScreenProps {
     selectedTags: string[];
   }) => void;
   onSessionExpired: () => void;
+  onBack: () => void;
 }
 
 export function SelectStoryScreen({
@@ -31,6 +32,7 @@ export function SelectStoryScreen({
   savedFrequentTags,
   onContinue,
   onSessionExpired,
+  onBack,
 }: SelectStoryScreenProps): React.ReactElement {
   const [orgs, setOrgs] = useState<string[]>([]);
   const [org, setOrg] = useState(savedOrg || '');
@@ -211,6 +213,9 @@ export function SelectStoryScreen({
           fullWidth
         >
           Continue to Review
+        </Button>
+        <Button onClick={onBack} variant="text" fullWidth>
+          Back
         </Button>
       </div>
     </div>

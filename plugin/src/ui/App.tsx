@@ -285,7 +285,11 @@ export function App(): React.ReactElement {
       )}
 
       {screen === 'context' && (
-        <ContextScreen frames={frames} onGenerate={handleGenerate} />
+        <ContextScreen
+          frames={frames}
+          onGenerate={handleGenerate}
+          onBack={() => setScreen('home')}
+        />
       )}
 
       {screen === 'generating' && (
@@ -302,6 +306,7 @@ export function App(): React.ReactElement {
           onTaskToggle={handleTaskToggle}
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-story')}
+          onBack={() => setScreen('context')}
         />
       )}
 
@@ -315,6 +320,7 @@ export function App(): React.ReactElement {
           savedFrequentTags={storage.frequentTags}
           onContinue={handleStorySelected}
           onSessionExpired={handleSessionExpired}
+          onBack={() => setScreen('connect-azure')}
         />
       )}
 

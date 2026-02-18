@@ -31,9 +31,18 @@ async function azureFetch(
   if (!response.ok) {
     const errorText = await response.text();
     // Throw specific error for auth failures so they can be forwarded as 401
-    if (response.status === 401 || response.status === 403) {
+    // Also check for common auth error messages in response body
+    const isAuthError =
+      response.status === 401 ||
+      response.status === 403 ||
+      errorText.includes('unauthorized') ||
+      errorText.includes('token') ||
+      errorText.includes('expired') ||
+      errorText.includes('invalid_token') ||
+      errorText.includes('Access Denied');
+    if (isAuthError) {
       throw new AzureAuthError(
-        `Authentication failed: ${errorText}`
+        `Authentication failed (${response.status}): ${errorText}`
       );
     }
     throw new Error(

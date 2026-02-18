@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getTags, AzureAuthError } from '../_lib/azure';
-import { requireAuth, handleCors } from '../_lib/auth';
+import { getTags } from '../_lib/azure';
+import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
 export default async function handler(
   req: VercelRequest,
@@ -31,7 +31,7 @@ export default async function handler(
     res.status(200).json({ tags });
   } catch (error) {
     console.error('Tags error:', error);
-    if (error instanceof Error && error.name === 'AzureAuthError') {
+    if (isAzureAuthError(error)) {
       res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
       return;
     }

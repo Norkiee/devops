@@ -3,7 +3,7 @@ import React from 'react';
 interface ButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'text';
   disabled?: boolean;
   fullWidth?: boolean;
 }
@@ -39,6 +39,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#999999',
     cursor: 'not-allowed',
   },
+  text: {
+    background: 'transparent',
+    color: '#7c3aed',
+    padding: '8px 16px',
+  },
+  textDisabled: {
+    background: 'transparent',
+    color: '#cccccc',
+    cursor: 'not-allowed',
+    padding: '8px 16px',
+  },
   fullWidth: {
     width: '100%',
   },
@@ -51,13 +62,18 @@ export function Button({
   disabled = false,
   fullWidth = false,
 }: ButtonProps): React.ReactElement {
-  const variantStyle = disabled
-    ? variant === 'primary'
-      ? styles.primaryDisabled
-      : styles.secondaryDisabled
-    : variant === 'primary'
-      ? styles.primary
-      : styles.secondary;
+  const getVariantStyle = () => {
+    if (disabled) {
+      if (variant === 'primary') return styles.primaryDisabled;
+      if (variant === 'text') return styles.textDisabled;
+      return styles.secondaryDisabled;
+    }
+    if (variant === 'primary') return styles.primary;
+    if (variant === 'text') return styles.text;
+    return styles.secondary;
+  };
+
+  const variantStyle = getVariantStyle();
 
   return (
     <button

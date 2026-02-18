@@ -1,3 +1,35 @@
+// Text element with inferred role based on styling
+export interface TextElement {
+  text: string;
+  role: 'heading' | 'subheading' | 'body' | 'label' | 'button' | 'caption';
+}
+
+// Interactive UI elements detected from component names
+export interface InteractiveElement {
+  type: 'button' | 'input' | 'checkbox' | 'toggle' | 'dropdown' | 'link';
+  label: string;
+  variant?: string; // e.g., 'primary', 'secondary', 'icon'
+}
+
+// Section with metadata about its contents
+export interface SectionInfo {
+  name: string;
+  elementCount: number;
+  pattern?: 'form' | 'list' | 'grid' | 'card' | 'navigation';
+}
+
+// Detected layout pattern for the frame
+export type LayoutPattern =
+  | 'form'
+  | 'list'
+  | 'grid'
+  | 'dashboard'
+  | 'modal'
+  | 'empty-state'
+  | 'navigation'
+  | 'detail'
+  | 'unknown';
+
 export interface FrameData {
   id: string;
   name: string;
@@ -6,6 +38,11 @@ export interface FrameData {
   nestedFrameNames: string[];
   width: number;
   height: number;
+  // Enhanced extraction fields (optional for backwards compatibility)
+  textElements?: TextElement[];
+  interactiveElements?: InteractiveElement[];
+  sections?: SectionInfo[];
+  layoutPattern?: LayoutPattern;
 }
 
 export interface GenerateRequest {
