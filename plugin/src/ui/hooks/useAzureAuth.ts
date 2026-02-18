@@ -6,7 +6,7 @@ interface UseAzureAuthResult {
   isAuthenticated: boolean;
   accessToken: string | null;
   sessionId: string | null;
-  startAuth: () => void;
+  startAuth: (onComplete?: () => void) => void;
   refresh: () => Promise<void>;
   logout: () => void;
 }
@@ -57,7 +57,7 @@ export function useAzureAuth(): UseAzureAuthResult {
     };
   }, []);
 
-  const startAuth = useCallback(() => {
+  const startAuth = useCallback((onComplete?: () => void) => {
     const state = generateId();
 
     // Open auth URL in browser
@@ -80,6 +80,10 @@ export function useAzureAuth(): UseAzureAuthResult {
             accessToken: result.accessToken,
             sessionId: result.sessionId,
           });
+          // Call completion callback to trigger navigation
+          if (onComplete) {
+            onComplete();
+          }
         }
       } catch {
         // Keep polling on error

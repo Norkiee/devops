@@ -72,7 +72,10 @@ export function App(): React.ReactElement {
   );
 
   const handleConnectAzure = useCallback(() => {
-    auth.startAuth();
+    auth.startAuth(() => {
+      // Navigate to select-story after auth completes
+      setScreen('select-story');
+    });
   }, [auth]);
 
   const handleSessionExpired = useCallback(() => {
