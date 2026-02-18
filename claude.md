@@ -74,7 +74,7 @@ A Figma plugin that:
 | Figma Plugin UI | React + TypeScript |
 | Figma Plugin Logic | TypeScript (main.ts) |
 | Backend | Vercel Serverless Functions (Node.js) |
-| AI | Claude API (claude-sonnet-4-20250514) |
+| AI | Claude API (claude-sonnet-4-20250514) via direct fetch |
 | Database | Redis (ioredis) for token storage |
 | Auth | Azure DevOps OAuth 2.0 (polling-based flow) |
 
@@ -619,13 +619,10 @@ export default async function handler(
       60 * 5
     );
 
+    // Returns a styled success page with animated checkmark
+    // See api/azure/callback.ts for full HTML template
     res.setHeader('Content-Type', 'text/html');
-    res.send(`<!DOCTYPE html>
-<html>
-  <body>
-    <p>Authentication successful! You can close this window and return to Figma.</p>
-  </body>
-</html>`);
+    res.send(/* Styled HTML success page */);
   } catch (err) {
     console.error('OAuth callback error:', err);
     const message = err instanceof Error ? err.message : String(err);
@@ -899,14 +896,40 @@ export interface CreateTaskResult {
 
 ## Claude Prompt Engineering
 
+### API Implementation
+
+The Claude API is called using direct `fetch` instead of the Anthropic SDK for better error handling and compatibility:
+
+```typescript
+const response = await fetch('https://api.anthropic.com/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': process.env.ANTHROPIC_API_KEY,
+    'anthropic-version': '2023-06-01',
+  },
+  body: JSON.stringify({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1000,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userPrompt }],
+  }),
+});
+```
+
 ### System Prompt
+
+The system prompt includes:
+1. Base guidelines for task generation
+2. UI pattern-specific guidelines (forms, dashboards, lists, modals, empty states)
+3. Few-shot examples showing expected output for different frame types
 
 ```
 You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, analyze the content and generate clear, actionable tasks for developers.
 
 Break down the frame into logical implementation tasks. Generate 1-5 tasks depending on complexity:
 - Simple frames (few elements, single purpose): 1-2 tasks
-- Medium frames (forms, multiple sections): 2-3 tasks  
+- Medium frames (forms, multiple sections): 2-3 tasks
 - Complex frames (dashboards, multi-feature screens): 3-5 tasks
 
 Guidelines:
@@ -921,6 +944,14 @@ Guidelines:
 - Do not include estimates or assignees
 - Keep language professional and clear
 
+## UI Pattern Guidelines
+
+**Forms:** Create tasks for form layout, validation states, and submission handling separately.
+**Dashboards:** Break into header/filters, metric cards, charts/graphs, and data tables.
+**Lists/Tables:** Include sorting, filtering, pagination, and empty states.
+**Modals/Dialogs:** Consider trigger, content, and dismiss actions.
+**Empty States:** Usually single task for illustration + message + CTA.
+
 Output JSON format:
 {
   "tasks": [
@@ -929,6 +960,8 @@ Output JSON format:
   ]
 }
 ```
+
+The prompt also includes 3 few-shot examples (simple, medium, complex frames) to guide output quality. See `api/_lib/claude.ts` for the full implementation.
 
 ### User Prompt Template
 
@@ -1038,7 +1071,7 @@ Additional context: Search results page empty state
 - Chips showing selected frame names
 - Single textarea: "Context (optional)" with placeholder
 - "Generate Tasks" primary button
-- "Skip context, generate anyway →" link
+- "Back" text button (returns to Home)
 
 **Behavior:**
 - Textarea is optional
@@ -1065,12 +1098,13 @@ Additional context: Search results page empty state
 **State:** Tasks generated, not authenticated
 
 **Elements:**
-- Azure DevOps icon
 - Success badge: "X tasks ready"
-- Heading: "Connect to Azure DevOps"
+- Heading: "Connect to Azure DevOps" (or "Connected to Azure DevOps" if authenticated)
 - Subtext: "Sign in to push tasks to your Azure DevOps board"
-- "Connect Azure DevOps" primary button
-- Preview list of generated task titles (read-only)
+- Collapsible frame groups with task checkboxes (select/deselect tasks)
+- "Connect Azure DevOps" primary button (or "Reconnect" if already authenticated)
+- "Continue with existing session" secondary button (if authenticated)
+- "Back" text button (returns to Context)
 
 **Behavior:**
 - Check if already authenticated (stored token)
@@ -1085,12 +1119,12 @@ Additional context: Search results page empty state
 **Elements:**
 - Heading: "Assign to Story"
 - Subtext: "All X tasks will be linked to this story"
-- Dropdown: Organization (auto-fetched on mount)
-- Dropdown: Project (pre-filled if remembered)
-- Dropdown: User Story (required, shows active only)
+- Custom dropdown: Organization (auto-fetched on mount)
+- Custom dropdown: Project (pre-filled if remembered)
+- Custom dropdown: User Story (required, shows active only)
 - Multi-select: Tags (fetched from Azure)
-- Hint showing last used story
 - "Continue to Review" primary button
+- "Back" text button (returns to Connect Azure)
 
 **Behavior:**
 - Auto-fetch organizations on mount via `/api/azure/orgs`
@@ -1411,7 +1445,7 @@ The plugin uses a **polling-based OAuth flow** instead of `window.postMessage` t
 4. Azure redirects to: GET /api/azure/callback?code=...&state={state}
 5. Callback exchanges code for tokens
 6. Callback stores result in Redis: auth:{state} (5 min TTL)
-7. Callback shows "Success, close this window" HTML
+7. Callback shows styled success page with animated checkmark
 8. Plugin polls: GET /api/azure/poll?state={state}
 9. Poll returns { status: 'pending' } or { status: 'complete', sessionId, accessToken }
 10. Plugin stores sessionId for token refresh, accessToken in memory
@@ -1541,6 +1575,56 @@ const createTask = async (task: AzureTask, org: string, projectId: string, acces
 
 ---
 
+## Design System
+
+### Color Palette
+
+| Color | Hex | Usage |
+|-------|-----|-------|
+| Primary Purple | `#7c3aed` | Buttons, checkmarks, focus states, accent color |
+| Primary Purple Light | `#f3e8ff` | Hover states, backgrounds |
+| Primary Purple Disabled | `#c4b5fd` | Disabled buttons |
+| Text Primary | `#333333` | Headings, body text |
+| Text Secondary | `#666666` | Labels, secondary text |
+| Text Muted | `#999999` | Placeholders, disabled text |
+| Border | `#e0e0e0` | Input borders, dividers |
+| Background | `#f5f5f5` | Secondary backgrounds |
+
+### Component Styling
+
+**Buttons:**
+- Primary: Fully rounded (`borderRadius: 9999px`), purple background, white text
+- Secondary: Fully rounded, light gray background, dark text
+- Text: Transparent background, purple text (used for back buttons)
+
+**Inputs & Dropdowns:**
+- Rounded edges (`borderRadius: 10px`)
+- 1px border with `#e0e0e0`
+- Purple focus ring on focus
+
+**Custom Dropdown (Select):**
+- Custom-built dropdown replacing native `<select>`
+- Click to open, click outside to close
+- Selected item shows purple checkmark (not full background)
+- Hover state with light purple background
+- Animated chevron rotation
+
+**Checkboxes:**
+- Purple accent color (`accentColor: #7c3aed`)
+
+**Loading Spinner:**
+- Purple spinning indicator (`borderTopColor: #7c3aed`)
+
+### Navigation
+
+Back buttons are available on most screens for easy navigation:
+- Context Screen → Home
+- Connect Azure Screen → Context
+- Select Story Screen → Connect Azure
+- Review Screen → Select Story
+
+---
+
 ## Development Guidelines
 
 ### Code Style
@@ -1645,6 +1729,20 @@ cd ..
 ```
 
 ### Deploy API to Vercel
+
+**Recommended: Git-based deployment (auto-deploy)**
+
+The project is connected to GitHub for automatic deployments. Push to `main` branch to trigger a production deployment:
+
+```bash
+git add .
+git commit -m "Your commit message"
+git push
+```
+
+Vercel will automatically build and deploy when changes are pushed to the `main` branch.
+
+**Alternative: Manual deployment via CLI**
 
 ```bash
 # Install Vercel CLI globally
