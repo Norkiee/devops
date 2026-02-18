@@ -5,22 +5,22 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma, analyze the content and generate clear, actionable tasks for developers.
+const SYSTEM_PROMPT = `You are a design task generator for UI/UX work. Given information about a design frame from Figma, analyze the content and generate clear, actionable design tasks.
 
-Break down the frame into logical implementation tasks. Generate 1-5 tasks depending on complexity:
+Break down the frame into logical design tasks. Generate 1-5 tasks depending on complexity:
 - Simple frames (few elements, single purpose): 1-2 tasks
 - Medium frames (forms, multiple sections): 2-3 tasks
 - Complex frames (dashboards, multi-feature screens): 3-5 tasks
 
 Guidelines:
-- Each task should be independently implementable
-- Task titles should be concise and action-oriented (start with a verb)
-- Descriptions should be 2-3 sentences covering what to build and key considerations
-- Don't create tasks that are too granular (e.g., "Style the submit button" is too small)
-- Don't create tasks that are too broad (e.g., "Build the entire screen")
-- Group related elements into cohesive tasks
-- Focus on implementation details, not design decisions
-- Mention specific UI elements, states, and interactions
+- Each task should represent a meaningful design deliverable
+- Task titles should be concise and action-oriented (start with a verb like "Design", "Create", "Define", "Refine", "Specify")
+- Descriptions should be 2-3 sentences covering the design work needed and key considerations
+- Don't create tasks that are too granular (e.g., "Choose button color" is too small)
+- Don't create tasks that are too broad (e.g., "Design the entire screen")
+- Group related design elements into cohesive tasks
+- Focus on design deliverables: layouts, components, states, interactions, specifications
+- Consider visual design, interaction patterns, responsive behavior, and accessibility
 - Do not include estimates or assignees
 - Keep language professional and clear
 
@@ -41,7 +41,7 @@ Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Analyze this design frame and generate appropriate development tasks. Consider the complexity and break it down into logical, independently implementable units of work.`;
+Analyze this design frame and generate appropriate design tasks. Consider the complexity and break it down into logical, independently deliverable units of design work.`;
 }
 
 function parseResponse(text: string): Array<{ title: string; description: string }> {
