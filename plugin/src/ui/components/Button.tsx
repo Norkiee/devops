@@ -11,7 +11,7 @@ interface ButtonProps {
 const styles: Record<string, React.CSSProperties> = {
   base: {
     padding: '12px 16px',
-    borderRadius: '10px',
+    borderRadius: '9999px',
     fontSize: '14px',
     fontWeight: 500,
     fontFamily: "'General Sans', -apple-system, BlinkMacSystemFont, sans-serif",

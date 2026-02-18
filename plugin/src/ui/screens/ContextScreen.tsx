@@ -44,14 +44,6 @@ export function ContextScreen({
         >
           Generate tasks
         </Button>
-        <div style={{ textAlign: 'center', marginTop: '8px' }}>
-          <button
-            className="link-button"
-            onClick={() => onGenerate(undefined)}
-          >
-            Skip context, generate anyway
-          </button>
-        </div>
       </div>
     </div>
   );
