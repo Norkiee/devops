@@ -43,15 +43,36 @@ async function azureFetch(
   return response;
 }
 
-export async function listOrganizations(
+export interface UserProfile {
+  id: string;
+  displayName: string;
+  emailAddress: string;
+}
+
+export async function getCurrentUser(
   accessToken: string
-): Promise<string[]> {
-  // First get the user's profile to get their member ID
+): Promise<UserProfile> {
   const profileResponse = await azureFetch(
     'https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1',
     accessToken
   );
-  const profile = (await profileResponse.json()) as { id: string };
+  const profile = (await profileResponse.json()) as {
+    id: string;
+    displayName: string;
+    emailAddress: string;
+  };
+  return {
+    id: profile.id,
+    displayName: profile.displayName,
+    emailAddress: profile.emailAddress,
+  };
+}
+
+export async function listOrganizations(
+  accessToken: string
+): Promise<string[]> {
+  // First get the user's profile to get their member ID
+  const profile = await getCurrentUser(accessToken);
 
   // Then get their organizations using the member ID
   const accountsResponse = await azureFetch(
@@ -138,7 +159,7 @@ export async function createTask(
   opts: AzureApiOptions & { projectId: string },
   task: AzureTask
 ): Promise<{ id: number; url: string }> {
-  const patchDoc = [
+  const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: task.title },
     {
       op: 'add',
@@ -160,6 +181,15 @@ export async function createTask(
       },
     },
   ];
+
+  // Add assigned user if provided
+  if (task.assignedTo) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.AssignedTo',
+      value: task.assignedTo,
+    });
+  }
 
   const response = await azureFetch(
     `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Task?api-version=${AZURE_API_VERSION}`,

@@ -36,6 +36,7 @@ export interface AzureTask {
   parentStoryId: number;
   tags: string[];
   state: 'New';
+  assignedTo?: string;
 }
 
 export interface TaskToCreate {

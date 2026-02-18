@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTask, AzureAuthError } from '../_lib/azure';
+import { createTask, getCurrentUser, AzureAuthError } from '../_lib/azure';
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors } from '../_lib/auth';
 
@@ -28,6 +28,9 @@ export default async function handler(
   }
 
   try {
+    // Get current user to auto-assign tasks
+    const currentUser = await getCurrentUser(auth.accessToken);
+
     const results: CreateTaskResult[] = await Promise.all(
       tasks.map(async (task) => {
         try {
@@ -43,6 +46,7 @@ export default async function handler(
               parentStoryId: task.parentStoryId,
               tags: task.tags,
               state: 'New',
+              assignedTo: currentUser.emailAddress,
             }
           );
           return {
