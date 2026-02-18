@@ -199,15 +199,16 @@ export function ConnectAzureScreen({
         <div style={styles.footerStats}>
           {selectedCount} of {totalTasks} tasks selected
         </div>
-        {isAuthenticated ? (
-          <Button onClick={onContinue} fullWidth disabled={selectedCount === 0}>
-            Continue
-          </Button>
-        ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <Button onClick={onConnect} fullWidth disabled={selectedCount === 0}>
-            Connect Azure DevOps
+            {isAuthenticated ? 'Reconnect to Azure DevOps' : 'Connect Azure DevOps'}
           </Button>
-        )}
+          {isAuthenticated && (
+            <Button onClick={onContinue} fullWidth disabled={selectedCount === 0} variant="secondary">
+              Continue with existing session
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
