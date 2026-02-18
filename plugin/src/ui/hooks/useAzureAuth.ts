@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getAuthUrl, pollAuthResult, refreshToken } from '../services/api';
-import { getStorage, setStorage } from '../services/storage';
+import { initStorage, getStorage, setStorage, onStorageChange } from '../services/storage';
 
 interface UseAzureAuthResult {
   isAuthenticated: boolean;
@@ -21,13 +21,31 @@ export function useAzureAuth(): UseAzureAuthResult {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollInterval = useRef<number | null>(null);
+  const hasRestoredFromStorage = useRef(false);
 
+  // Restore auth from storage when it loads
   useEffect(() => {
+    // Initialize storage to ensure it's loaded
+    initStorage();
+
+    // Check immediately in case storage is already loaded
     const stored = getStorage();
-    if (stored.accessToken && stored.sessionId) {
+    if (stored.accessToken && stored.sessionId && !hasRestoredFromStorage.current) {
+      hasRestoredFromStorage.current = true;
       setAccessToken(stored.accessToken);
       setSessionId(stored.sessionId);
     }
+
+    // Subscribe to storage changes for async load
+    const unsubscribe = onStorageChange((data) => {
+      if (data.accessToken && data.sessionId && !hasRestoredFromStorage.current) {
+        hasRestoredFromStorage.current = true;
+        setAccessToken(data.accessToken);
+        setSessionId(data.sessionId);
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   // Cleanup polling on unmount
