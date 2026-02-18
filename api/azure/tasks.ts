@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTask } from '../_lib/azure';
+import { createTask, AzureAuthError } from '../_lib/azure';
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors } from '../_lib/auth';
 
@@ -52,6 +52,10 @@ export default async function handler(
             taskUrl: result.url,
           };
         } catch (error) {
+          // Re-throw auth errors to be handled at top level
+          if (error instanceof AzureAuthError) {
+            throw error;
+          }
           return {
             taskId: task.taskId,
             success: false,
@@ -67,6 +71,10 @@ export default async function handler(
     res.status(200).json({ results });
   } catch (error) {
     console.error('Tasks error:', error);
+    if (error instanceof AzureAuthError) {
+      res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create tasks' });
   }
 }

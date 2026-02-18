@@ -11,7 +11,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { generateTasks, createTasks } from './services/api';
+import { generateTasks, createTasks, AuthError } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ContextScreen } from './screens/ContextScreen';
 import { GeneratingScreen } from './screens/GeneratingScreen';
@@ -76,6 +76,11 @@ export function App(): React.ReactElement {
 
   const handleConnectAzure = useCallback(() => {
     auth.startAuth();
+  }, [auth]);
+
+  const handleSessionExpired = useCallback(() => {
+    auth.logout();
+    setScreen('connect-azure');
   }, [auth]);
 
   const getTotalTaskCount = useCallback(() => {
@@ -189,10 +194,14 @@ export function App(): React.ReactElement {
       const allSuccess = taskResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Submission failed');
-      setScreen('review');
+      if (err instanceof AuthError) {
+        handleSessionExpired();
+      } else {
+        setError(err instanceof Error ? err.message : 'Submission failed');
+        setScreen('review');
+      }
     }
-  }, [getSelectedTasks, auth.accessToken, azureOrg, azureProjectId]);
+  }, [getSelectedTasks, auth.accessToken, azureOrg, azureProjectId, handleSessionExpired]);
 
   const handleRetry = useCallback(async () => {
     const tasksToSubmit = getSelectedTasks();
@@ -229,10 +238,14 @@ export function App(): React.ReactElement {
       const allSuccess = updatedResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Retry failed');
-      setScreen('partial-failure');
+      if (err instanceof AuthError) {
+        handleSessionExpired();
+      } else {
+        setError(err instanceof Error ? err.message : 'Retry failed');
+        setScreen('partial-failure');
+      }
     }
-  }, [results, getSelectedTasks, auth.accessToken, azureOrg, azureProjectId]);
+  }, [results, getSelectedTasks, auth.accessToken, azureOrg, azureProjectId, handleSessionExpired]);
 
   const handleViewInAzure = useCallback(() => {
     const firstSuccess = results.find((r) => r.success && r.taskUrl);
@@ -301,6 +314,7 @@ export function App(): React.ReactElement {
           savedStoryId={storage.lastStoryId}
           savedFrequentTags={storage.frequentTags}
           onContinue={handleStorySelected}
+          onSessionExpired={handleSessionExpired}
         />
       )}
 

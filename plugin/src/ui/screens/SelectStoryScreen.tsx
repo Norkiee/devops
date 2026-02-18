@@ -3,7 +3,7 @@ import { AzureProject, AzureStory } from '../types';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
 import { Tag } from '../components/Tag';
-import { fetchOrgs, fetchProjects, fetchStories, fetchTags } from '../services/api';
+import { fetchOrgs, fetchProjects, fetchStories, fetchTags, AuthError } from '../services/api';
 
 interface SelectStoryScreenProps {
   accessToken: string;
@@ -19,6 +19,7 @@ interface SelectStoryScreenProps {
     storyTitle: string;
     selectedTags: string[];
   }) => void;
+  onSessionExpired: () => void;
 }
 
 export function SelectStoryScreen({
@@ -29,6 +30,7 @@ export function SelectStoryScreen({
   savedStoryId,
   savedFrequentTags,
   onContinue,
+  onSessionExpired,
 }: SelectStoryScreenProps): React.ReactElement {
   const [orgs, setOrgs] = useState<string[]>([]);
   const [org, setOrg] = useState(savedOrg || '');
@@ -57,9 +59,15 @@ export function SelectStoryScreen({
           setOrg(fetchedOrgs[0]);
         }
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (err instanceof AuthError) {
+          onSessionExpired();
+        } else {
+          setError(err.message);
+        }
+      })
       .finally(() => setLoading(false));
-  }, [accessToken, savedOrg]);
+  }, [accessToken, savedOrg, onSessionExpired]);
 
   // Fetch projects when org changes
   useEffect(() => {
@@ -72,9 +80,15 @@ export function SelectStoryScreen({
     setError('');
     fetchProjects(accessToken, org)
       .then(setProjects)
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (err instanceof AuthError) {
+          onSessionExpired();
+        } else {
+          setError(err.message);
+        }
+      })
       .finally(() => setLoading(false));
-  }, [accessToken, org]);
+  }, [accessToken, org, onSessionExpired]);
 
   // Fetch stories and tags when project changes
   useEffect(() => {
@@ -91,9 +105,15 @@ export function SelectStoryScreen({
         setStories(fetchedStories);
         setAvailableTags(fetchedTags);
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (err instanceof AuthError) {
+          onSessionExpired();
+        } else {
+          setError(err.message);
+        }
+      })
       .finally(() => setLoading(false));
-  }, [accessToken, org, projectId]);
+  }, [accessToken, org, projectId, onSessionExpired]);
 
   const toggleTag = (tag: string): void => {
     setSelectedTags((prev) =>

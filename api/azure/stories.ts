@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryStories } from '../_lib/azure';
+import { queryStories, AzureAuthError } from '../_lib/azure';
 import { requireAuth, handleCors } from '../_lib/auth';
 
 export default async function handler(
@@ -31,6 +31,10 @@ export default async function handler(
     res.status(200).json({ stories });
   } catch (error) {
     console.error('Stories error:', error);
+    if (error instanceof AzureAuthError) {
+      res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
+      return;
+    }
     res.status(500).json({ error: 'Failed to fetch stories' });
   }
 }

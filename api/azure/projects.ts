@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { listProjects } from '../_lib/azure';
+import { listProjects, AzureAuthError } from '../_lib/azure';
 import { requireAuth, handleCors } from '../_lib/auth';
 
 export default async function handler(
@@ -24,6 +24,10 @@ export default async function handler(
     res.status(200).json({ projects });
   } catch (error) {
     console.error('Projects error:', error);
+    if (error instanceof AzureAuthError) {
+      res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
+      return;
+    }
     res.status(500).json({ error: 'Failed to fetch projects' });
   }
 }

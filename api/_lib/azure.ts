@@ -7,6 +7,14 @@ interface AzureApiOptions {
   accessToken: string;
 }
 
+// Custom error class for Azure auth failures
+export class AzureAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AzureAuthError';
+  }
+}
+
 async function azureFetch(
   url: string,
   accessToken: string,
@@ -22,6 +30,12 @@ async function azureFetch(
   });
   if (!response.ok) {
     const errorText = await response.text();
+    // Throw specific error for auth failures so they can be forwarded as 401
+    if (response.status === 401 || response.status === 403) {
+      throw new AzureAuthError(
+        `Authentication failed: ${errorText}`
+      );
+    }
     throw new Error(
       `Azure DevOps API error (${response.status}): ${errorText}`
     );

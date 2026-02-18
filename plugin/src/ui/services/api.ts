@@ -9,6 +9,14 @@ import {
 
 const API_URL = 'https://devops-psi.vercel.app';
 
+// Custom error class for authentication failures
+export class AuthError extends Error {
+  constructor(message: string = 'Session expired') {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -21,9 +29,27 @@ async function request<T>(
     },
   });
 
+  // Check if response is JSON
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    // Detect authentication failures (401 Unauthorized)
+    if (response.status === 401) {
+      throw new AuthError('Session expired. Please reconnect to Azure DevOps.');
+    }
+
+    // Try to parse JSON error, fallback to generic message
+    if (isJson) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    throw new Error(`HTTP ${response.status}: Request failed`);
+  }
+
+  // Parse JSON response, handle non-JSON responses
+  if (!isJson) {
+    throw new Error('Invalid response from server');
   }
 
   return response.json();
