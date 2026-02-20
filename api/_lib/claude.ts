@@ -1,5 +1,46 @@
 import { FrameData, FrameTasks, TaskItem } from './types';
 
+const MAX_RETRIES = 3;
+const INITIAL_DELAY_MS = 1000;
+const RETRYABLE_STATUS_CODES = [429, 503, 529];
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(url, options);
+
+    if (response.ok) {
+      return response;
+    }
+
+    // Check if this is a retryable error
+    if (RETRYABLE_STATUS_CODES.includes(response.status) && attempt < retries) {
+      const delay = INITIAL_DELAY_MS * Math.pow(2, attempt);
+      console.log(
+        `Anthropic API returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${retries})`
+      );
+      await sleep(delay);
+      continue;
+    }
+
+    // Non-retryable error or out of retries
+    const errorText = await response.text();
+    lastError = new Error(`Anthropic API error (${response.status}): ${errorText}`);
+    break;
+  }
+
+  throw lastError || new Error('Unknown error during fetch');
+}
+
 const SYSTEM_PROMPT = `You are a design task generator for UI/UX work. Given information about a design frame from Figma, analyze the content and generate clear, actionable design tasks.
 
 Break down the frame into logical design tasks. Generate 1-5 tasks depending on complexity:
@@ -65,8 +106,8 @@ export async function generateTasksForFrame(
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
 
-  // Use fetch directly instead of SDK
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Use fetch with retry logic for transient errors (429, 503, 529)
+  const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -80,11 +121,6 @@ export async function generateTasksForFrame(
       messages: [{ role: 'user', content: buildUserPrompt(frame, context) }],
     }),
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
-  }
 
   const data = (await response.json()) as {
     content: Array<{ type: string; text?: string }>;
