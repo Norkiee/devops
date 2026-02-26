@@ -17,7 +17,25 @@ export async function kvGet<T>(key: string): Promise<T | null> {
   const redis = getClient();
   const value = await redis.get(key);
   if (!value) return null;
-  return JSON.parse(value) as T;
+  try {
+    return JSON.parse(value) as T;
+  } catch (err) {
+    console.error(`Failed to parse Redis value for key ${key}:`, err);
+    return null;
+  }
+}
+
+// Atomic get-and-delete to prevent race conditions
+export async function kvGetDel<T>(key: string): Promise<T | null> {
+  const redis = getClient();
+  const value = await redis.getdel(key);
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch (err) {
+    console.error(`Failed to parse Redis value for key ${key}:`, err);
+    return null;
+  }
 }
 
 export async function kvSet(

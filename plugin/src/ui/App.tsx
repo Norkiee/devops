@@ -320,6 +320,7 @@ export function App(): React.ReactElement {
           savedFrequentTags={storage.frequentTags}
           onContinue={handleStorySelected}
           onSessionExpired={handleSessionExpired}
+          onRefreshToken={auth.refresh}
           onBack={() => setScreen('connect-azure')}
         />
       )}

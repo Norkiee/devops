@@ -1,5 +1,26 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { randomUUID } from 'crypto';
 import { kvSet } from '../_lib/redis';
+
+// Validate required environment variables
+function getRequiredEnvVars(): {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  resourceId: string;
+} {
+  const clientId = process.env.AZURE_CLIENT_ID;
+  const clientSecret = process.env.AZURE_CLIENT_SECRET;
+  const redirectUri = process.env.AZURE_REDIRECT_URI;
+  const resourceId = process.env.AZURE_DEVOPS_RESOURCE_ID;
+
+  if (!clientId) throw new Error('Missing AZURE_CLIENT_ID');
+  if (!clientSecret) throw new Error('Missing AZURE_CLIENT_SECRET');
+  if (!redirectUri) throw new Error('Missing AZURE_REDIRECT_URI');
+  if (!resourceId) throw new Error('Missing AZURE_DEVOPS_RESOURCE_ID');
+
+  return { clientId, clientSecret, redirectUri, resourceId };
+}
 
 export default async function handler(
   req: VercelRequest,
@@ -23,6 +44,15 @@ export default async function handler(
     return;
   }
 
+  let envVars: { clientId: string; clientSecret: string; redirectUri: string; resourceId: string };
+  try {
+    envVars = getRequiredEnvVars();
+  } catch (error) {
+    console.error('Environment variable error:', error);
+    res.status(500).send('Server configuration error');
+    return;
+  }
+
   try {
     const tenantId = process.env.AZURE_TENANT_ID || 'common';
 
@@ -32,12 +62,12 @@ export default async function handler(
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          client_id: process.env.AZURE_CLIENT_ID!,
-          client_secret: process.env.AZURE_CLIENT_SECRET!,
+          client_id: envVars.clientId,
+          client_secret: envVars.clientSecret,
           code,
-          redirect_uri: process.env.AZURE_REDIRECT_URI!,
+          redirect_uri: envVars.redirectUri,
           grant_type: 'authorization_code',
-          scope: `${process.env.AZURE_DEVOPS_RESOURCE_ID}/.default offline_access`,
+          scope: `${envVars.resourceId}/.default offline_access`,
         }),
       }
     );
@@ -55,7 +85,6 @@ export default async function handler(
       expires_in: number;
     };
 
-    const { randomUUID } = await import('crypto');
     const sessionId = randomUUID();
 
     // Store refresh token for long-term session

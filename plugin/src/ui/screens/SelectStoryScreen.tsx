@@ -20,6 +20,7 @@ interface SelectStoryScreenProps {
     selectedTags: string[];
   }) => void;
   onSessionExpired: () => void;
+  onRefreshToken: () => Promise<void>;
   onBack: () => void;
 }
 
@@ -32,6 +33,7 @@ export function SelectStoryScreen({
   savedFrequentTags,
   onContinue,
   onSessionExpired,
+  onRefreshToken,
   onBack,
 }: SelectStoryScreenProps): React.ReactElement {
   const [orgs, setOrgs] = useState<string[]>([]);
@@ -46,13 +48,33 @@ export function SelectStoryScreen({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Helper to handle auth errors with refresh attempt
+  const handleAuthError = async (): Promise<boolean> => {
+    if (isRefreshing) return false;
+    setIsRefreshing(true);
+    try {
+      await onRefreshToken();
+      setIsRefreshing(false);
+      return true; // Refresh succeeded, caller should retry
+    } catch {
+      setIsRefreshing(false);
+      onSessionExpired();
+      return false; // Refresh failed, session expired
+    }
+  };
 
   // Auto-fetch organizations on mount
   useEffect(() => {
-    setLoading(true);
-    setError('');
-    fetchOrgs(accessToken)
-      .then((fetchedOrgs) => {
+    let isCancelled = false;
+
+    const loadOrgs = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const fetchedOrgs = await fetchOrgs(accessToken);
+        if (isCancelled) return;
         setOrgs(fetchedOrgs);
         // Auto-select if there's a saved org or only one org
         if (savedOrg && fetchedOrgs.includes(savedOrg)) {
@@ -60,62 +82,92 @@ export function SelectStoryScreen({
         } else if (fetchedOrgs.length === 1) {
           setOrg(fetchedOrgs[0]);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
+        if (isCancelled) return;
         if (err instanceof Error && err.name === 'AuthError') {
-          onSessionExpired();
+          // Attempt token refresh before giving up
+          const refreshed = await handleAuthError();
+          // If refresh succeeded, the accessToken prop will change and this effect will re-run
+          if (!refreshed && !isCancelled) {
+            // Already handled by handleAuthError calling onSessionExpired
+          }
         } else {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : 'Unknown error');
         }
-      })
-      .finally(() => setLoading(false));
-  }, [accessToken, savedOrg, onSessionExpired]);
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadOrgs();
+    return () => { isCancelled = true; };
+  }, [accessToken, savedOrg]);
 
   // Fetch projects when org changes
   useEffect(() => {
     if (!org) return;
-    setProjects([]);
-    setProjectId('');
-    setStories([]);
-    setStoryId('');
-    setLoading(true);
-    setError('');
-    fetchProjects(accessToken, org)
-      .then(setProjects)
-      .catch((err) => {
+    let isCancelled = false;
+
+    const loadProjects = async () => {
+      setProjects([]);
+      setProjectId('');
+      setStories([]);
+      setStoryId('');
+      setLoading(true);
+      setError('');
+      try {
+        const fetchedProjects = await fetchProjects(accessToken, org);
+        if (isCancelled) return;
+        setProjects(fetchedProjects);
+      } catch (err) {
+        if (isCancelled) return;
         if (err instanceof Error && err.name === 'AuthError') {
-          onSessionExpired();
+          await handleAuthError();
         } else {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : 'Unknown error');
         }
-      })
-      .finally(() => setLoading(false));
-  }, [accessToken, org, onSessionExpired]);
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadProjects();
+    return () => { isCancelled = true; };
+  }, [accessToken, org]);
 
   // Fetch stories and tags when project changes
   useEffect(() => {
     if (!org || !projectId) return;
-    setStories([]);
-    setStoryId('');
-    setLoading(true);
-    setError('');
-    Promise.all([
-      fetchStories(accessToken, org, projectId),
-      fetchTags(accessToken, org, projectId),
-    ])
-      .then(([fetchedStories, fetchedTags]) => {
+    let isCancelled = false;
+
+    const loadStoriesAndTags = async () => {
+      setStories([]);
+      setStoryId('');
+      setLoading(true);
+      setError('');
+      try {
+        const [fetchedStories, fetchedTags] = await Promise.all([
+          fetchStories(accessToken, org, projectId),
+          fetchTags(accessToken, org, projectId),
+        ]);
+        if (isCancelled) return;
         setStories(fetchedStories);
         setAvailableTags(fetchedTags);
-      })
-      .catch((err) => {
+      } catch (err) {
+        if (isCancelled) return;
         if (err instanceof Error && err.name === 'AuthError') {
-          onSessionExpired();
+          await handleAuthError();
         } else {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : 'Unknown error');
         }
-      })
-      .finally(() => setLoading(false));
-  }, [accessToken, org, projectId, onSessionExpired]);
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadStoriesAndTags();
+    return () => { isCancelled = true; };
+  }, [accessToken, org, projectId]);
 
   const toggleTag = (tag: string): void => {
     setSelectedTags((prev) =>

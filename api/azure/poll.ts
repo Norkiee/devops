@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { kvGet, kvDel } from '../_lib/redis';
+import { kvGetDel } from '../_lib/redis';
 import { handleCors } from '../_lib/auth';
 
 interface AuthResult {
@@ -25,15 +25,14 @@ export default async function handler(
   }
 
   try {
-    const result = await kvGet<AuthResult>(`auth:${state}`);
+    // Atomic get-and-delete to prevent race conditions where two poll requests
+    // could both receive the same token before deletion
+    const result = await kvGetDel<AuthResult>(`auth:${state}`);
 
     if (!result) {
       res.status(200).json({ status: 'pending' });
       return;
     }
-
-    // Delete the auth result after reading (one-time use)
-    await kvDel(`auth:${state}`);
 
     res.status(200).json({
       status: 'complete',

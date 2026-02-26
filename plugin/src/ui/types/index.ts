@@ -54,6 +54,8 @@ export interface PluginStorage {
   lastStoryId?: number;
   frequentTags?: string[];
   sessionId?: string;
+  // Note: accessToken is stored for session persistence across plugin restarts.
+  // For higher security, consider storing only sessionId and refreshing tokens on each session.
   accessToken?: string;
 }
 

@@ -109,7 +109,10 @@ export function Select({
   const selectedOption = options.find((opt) => opt.value === value);
   const displayText = selectedOption?.label || placeholder || 'Select...';
 
+  // Only add click-outside listener when dropdown is open
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleClickOutside = (event: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -118,7 +121,7 @@ export function Select({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const handleSelect = (optValue: string) => {
     onChange(optValue);

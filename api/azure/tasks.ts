@@ -31,46 +31,64 @@ export default async function handler(
     // Get current user to auto-assign tasks
     const currentUser = await getCurrentUser(auth.accessToken);
 
-    const results: CreateTaskResult[] = await Promise.all(
+    // Use Promise.allSettled to capture both successes and failures
+    // This prevents losing successful results when some tasks fail
+    const settledResults = await Promise.allSettled(
       tasks.map(async (task) => {
-        try {
-          const result = await createTask(
-            {
-              org: auth.org,
-              accessToken: auth.accessToken,
-              projectId,
-            },
-            {
-              title: task.title,
-              description: task.description,
-              parentStoryId: task.parentStoryId,
-              tags: task.tags,
-              state: 'New',
-              assignedTo: currentUser.emailAddress,
-            }
-          );
-          return {
-            taskId: task.taskId,
-            success: true,
-            azureTaskId: result.id,
-            taskUrl: result.url,
-          };
-        } catch (error) {
-          // Re-throw auth errors to be handled at top level
-          if (isAzureAuthError(error)) {
-            throw error;
+        const result = await createTask(
+          {
+            org: auth.org,
+            accessToken: auth.accessToken,
+            projectId,
+          },
+          {
+            title: task.title,
+            description: task.description,
+            parentStoryId: task.parentStoryId,
+            tags: task.tags,
+            state: 'New',
+            assignedTo: currentUser.emailAddress,
           }
-          return {
-            taskId: task.taskId,
-            success: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : 'Unknown error creating task',
-          };
-        }
+        );
+        return {
+          taskId: task.taskId,
+          azureTaskId: result.id,
+          taskUrl: result.url,
+        };
       })
     );
+
+    // Check if any auth errors occurred (should trigger session expired)
+    let hasAuthError = false;
+    const results: CreateTaskResult[] = settledResults.map((settled, index) => {
+      if (settled.status === 'fulfilled') {
+        return {
+          taskId: settled.value.taskId,
+          success: true,
+          azureTaskId: settled.value.azureTaskId,
+          taskUrl: settled.value.taskUrl,
+        };
+      } else {
+        const error = settled.reason;
+        if (isAzureAuthError(error)) {
+          hasAuthError = true;
+        }
+        return {
+          taskId: tasks[index].taskId,
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error creating task',
+        };
+      }
+    });
+
+    // If any auth errors, return 401 but still include partial results
+    if (hasAuthError) {
+      res.status(401).json({
+        error: 'Session expired. Please reconnect to Azure DevOps.',
+        results
+      });
+      return;
+    }
 
     res.status(200).json({ results });
   } catch (error) {

@@ -3,6 +3,23 @@ import { kvGet, kvSet, kvDel } from '../_lib/redis';
 import { KVSession } from '../_lib/types';
 import { handleCors } from '../_lib/auth';
 
+// Validate required environment variables
+function getRequiredEnvVars(): {
+  clientId: string;
+  clientSecret: string;
+  resourceId: string;
+} {
+  const clientId = process.env.AZURE_CLIENT_ID;
+  const clientSecret = process.env.AZURE_CLIENT_SECRET;
+  const resourceId = process.env.AZURE_DEVOPS_RESOURCE_ID;
+
+  if (!clientId) throw new Error('Missing AZURE_CLIENT_ID');
+  if (!clientSecret) throw new Error('Missing AZURE_CLIENT_SECRET');
+  if (!resourceId) throw new Error('Missing AZURE_DEVOPS_RESOURCE_ID');
+
+  return { clientId, clientSecret, resourceId };
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -18,6 +35,15 @@ export default async function handler(
 
   if (!sessionId) {
     res.status(400).json({ error: 'No session ID provided' });
+    return;
+  }
+
+  let envVars: { clientId: string; clientSecret: string; resourceId: string };
+  try {
+    envVars = getRequiredEnvVars();
+  } catch (error) {
+    console.error('Environment variable error:', error);
+    res.status(500).json({ error: 'Server configuration error' });
     return;
   }
 
@@ -39,11 +65,11 @@ export default async function handler(
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          client_id: process.env.AZURE_CLIENT_ID!,
-          client_secret: process.env.AZURE_CLIENT_SECRET!,
+          client_id: envVars.clientId,
+          client_secret: envVars.clientSecret,
           refresh_token: session.refreshToken,
           grant_type: 'refresh_token',
-          scope: `${process.env.AZURE_DEVOPS_RESOURCE_ID}/.default offline_access`,
+          scope: `${envVars.resourceId}/.default offline_access`,
         }),
       }
     );

@@ -6,9 +6,11 @@ interface UseAzureAuthResult {
   isAuthenticated: boolean;
   accessToken: string | null;
   sessionId: string | null;
+  authError: string | null;
   startAuth: (onComplete?: () => void) => void;
   refresh: () => Promise<void>;
   logout: () => void;
+  clearAuthError: () => void;
 }
 
 function generateId(): string {
@@ -20,8 +22,12 @@ function generateId(): string {
 export function useAzureAuth(): UseAzureAuthResult {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const pollInterval = useRef<number | null>(null);
+  const pollTimeout = useRef<number | null>(null);
   const hasRestoredFromStorage = useRef(false);
+
+  const AUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
   // Restore auth from storage when it loads
   useEffect(() => {
@@ -48,32 +54,54 @@ export function useAzureAuth(): UseAzureAuthResult {
     return unsubscribe;
   }, []);
 
-  // Cleanup polling on unmount
+  // Cleanup polling and timeout on unmount
   useEffect(() => {
     return () => {
       if (pollInterval.current) {
         clearInterval(pollInterval.current);
+      }
+      if (pollTimeout.current) {
+        clearTimeout(pollTimeout.current);
       }
     };
   }, []);
 
   const startAuth = useCallback((onComplete?: () => void) => {
     const state = generateId();
+    setAuthError(null);
 
     // Open auth URL in browser
     window.open(getAuthUrl(state), '_blank');
 
-    // Poll for completion every 2 seconds
+    // Clear any existing polling/timeout
     if (pollInterval.current) {
       clearInterval(pollInterval.current);
     }
+    if (pollTimeout.current) {
+      clearTimeout(pollTimeout.current);
+    }
 
+    // Set timeout to stop polling after 5 minutes
+    pollTimeout.current = window.setTimeout(() => {
+      if (pollInterval.current) {
+        clearInterval(pollInterval.current);
+        pollInterval.current = null;
+      }
+      setAuthError('Authentication timed out. Please try again.');
+    }, AUTH_TIMEOUT_MS);
+
+    // Poll for completion every 2 seconds
     pollInterval.current = window.setInterval(async () => {
       try {
         const result = await pollAuthResult(state);
         if (result) {
+          // Clear both interval and timeout on success
           clearInterval(pollInterval.current!);
           pollInterval.current = null;
+          if (pollTimeout.current) {
+            clearTimeout(pollTimeout.current);
+            pollTimeout.current = null;
+          }
           setAccessToken(result.accessToken);
           setSessionId(result.sessionId);
           setStorage({
@@ -107,15 +135,22 @@ export function useAzureAuth(): UseAzureAuthResult {
   const logout = useCallback(() => {
     setAccessToken(null);
     setSessionId(null);
+    setAuthError(null);
     setStorage({ accessToken: undefined, sessionId: undefined });
+  }, []);
+
+  const clearAuthError = useCallback(() => {
+    setAuthError(null);
   }, []);
 
   return {
     isAuthenticated: !!accessToken,
     accessToken,
     sessionId,
+    authError,
     startAuth,
     refresh,
     logout,
+    clearAuthError,
   };
 }

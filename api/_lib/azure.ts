@@ -1,6 +1,7 @@
 import { AzureProject, AzureStory, AzureTask } from './types';
 
 const AZURE_API_VERSION = '7.1';
+const FETCH_TIMEOUT_MS = 30000; // 30 second timeout
 
 interface AzureApiOptions {
   org: string;
@@ -15,19 +16,44 @@ export class AzureAuthError extends Error {
   }
 }
 
+// Custom error class for timeout
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TimeoutError';
+  }
+}
+
 async function azureFetch(
   url: string,
   accessToken: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    clearTimeout(timeoutId);
+    return processResponse(response);
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new TimeoutError(`Request timed out after ${FETCH_TIMEOUT_MS}ms: ${url}`);
+    }
+    throw error;
+  }
+}
+
+async function processResponse(response: Response): Promise<Response> {
   if (!response.ok) {
     const errorText = await response.text();
     // Throw specific error for auth failures so they can be forwarded as 401
@@ -35,11 +61,11 @@ async function azureFetch(
     const isAuthError =
       response.status === 401 ||
       response.status === 403 ||
-      errorText.includes('unauthorized') ||
-      errorText.includes('token') ||
-      errorText.includes('expired') ||
-      errorText.includes('invalid_token') ||
-      errorText.includes('Access Denied');
+      errorText.toLowerCase().includes('unauthorized') ||
+      errorText.toLowerCase().includes('token') ||
+      errorText.toLowerCase().includes('expired') ||
+      errorText.toLowerCase().includes('invalid_token') ||
+      errorText.toLowerCase().includes('access denied');
     if (isAuthError) {
       throw new AzureAuthError(
         `Authentication failed (${response.status}): ${errorText}`
