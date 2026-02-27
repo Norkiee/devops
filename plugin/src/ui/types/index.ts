@@ -30,6 +30,7 @@ export interface AzureStory {
   id: number;
   title: string;
   state: string;
+  type: 'Epic' | 'Feature' | 'User Story';
 }
 
 export interface TaskToSubmit {

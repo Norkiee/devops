@@ -210,15 +210,15 @@ export function SelectStoryScreen({
         />
 
         <Select
-          label="User Story"
+          label="Parent Work Item"
           value={storyId}
           onChange={setStoryId}
           placeholder={
-            !projectId ? 'Select a project first' : loading ? 'Loading...' : 'Select a user story'
+            !projectId ? 'Select a project first' : loading ? 'Loading...' : 'Select a work item'
           }
           options={stories.map((s) => ({
             value: s.id.toString(),
-            label: `#${s.id} - ${s.title}`,
+            label: `#${s.id} (${s.type}) - ${s.title}`,
           }))}
         />
 

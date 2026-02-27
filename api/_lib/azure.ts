@@ -138,9 +138,9 @@ export async function queryStories(
   opts: AzureApiOptions & { projectId: string }
 ): Promise<AzureStory[]> {
   const wiqlQuery = {
-    query: `SELECT [System.Id], [System.Title], [System.State]
+    query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
             FROM WorkItems
-            WHERE [System.WorkItemType] = 'User Story'
+            WHERE [System.WorkItemType] IN ('Epic', 'Feature', 'User Story')
             AND [System.State] <> 'Closed'
             AND [System.State] <> 'Removed'
             ORDER BY [System.ChangedDate] DESC`,
@@ -165,7 +165,7 @@ export async function queryStories(
   const idsParam = ids.join(',');
 
   const detailResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const detailData = (await detailResponse.json()) as {
@@ -176,6 +176,7 @@ export async function queryStories(
     id: wi.id,
     title: wi.fields['System.Title'],
     state: wi.fields['System.State'],
+    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
   }));
 }
 
