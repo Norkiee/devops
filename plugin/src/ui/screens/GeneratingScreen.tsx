@@ -1,9 +1,10 @@
 import React from 'react';
-import { FrameData } from '../types';
+import { FrameData, WorkItemType } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface GeneratingScreenProps {
   frames: FrameData[];
+  workItemType?: WorkItemType;
   completedFrameIds: Set<string>;
 }
 
@@ -57,15 +58,17 @@ const styles: Record<string, React.CSSProperties> = {
 
 export function GeneratingScreen({
   frames,
+  workItemType = 'Task',
   completedFrameIds,
 }: GeneratingScreenProps): React.ReactElement {
   const completedCount = completedFrameIds.size;
   const totalCount = frames.length;
+  const itemLabel = workItemType === 'UserStory' ? 'user stories' : 'tasks';
 
   return (
     <div className="screen screen-center">
       <LoadingSpinner
-        label="Generating tasks..."
+        label={`Generating ${itemLabel}...`}
         sublabel={`Analyzing ${completedCount} of ${totalCount} frame${totalCount > 1 ? 's' : ''}`}
       />
       {frames.length > 1 && (

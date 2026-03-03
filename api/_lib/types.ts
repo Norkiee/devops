@@ -1,3 +1,21 @@
+// Work item types that can be generated
+export type WorkItemType = 'UserStory' | 'Task';
+
+// Hierarchy context for AI generation
+export interface HierarchyContext {
+  epic?: {
+    id: number;
+    title: string;
+    description?: string;
+  };
+  userStory?: {
+    id: number;
+    title: string;
+    description?: string;
+    acceptanceCriteria?: string;
+  };
+}
+
 // Text element with inferred role based on styling
 export interface TextElement {
   text: string;
@@ -33,6 +51,7 @@ export type LayoutPattern =
 export interface FrameData {
   id: string;
   name: string;
+  sectionName?: string; // Which Figma section this frame belongs to
   textContent: string[];
   componentNames: string[];
   nestedFrameNames: string[];
@@ -48,23 +67,36 @@ export interface FrameData {
 export interface GenerateRequest {
   frames: FrameData[];
   context?: string;
+  workItemType?: WorkItemType; // 'Task' by default for backwards compatibility
+  hierarchyContext?: HierarchyContext;
 }
 
-export interface TaskItem {
+export interface WorkItem {
   id: string;
   title: string;
   description: string;
+  acceptanceCriteria?: string; // Only for User Stories
   selected: boolean;
 }
 
-export interface FrameTasks {
+// Alias for backwards compatibility
+export type TaskItem = WorkItem;
+
+export interface FrameWorkItems {
   frameId: string;
   frameName: string;
-  tasks: TaskItem[];
+  sectionName?: string;
+  workItems: WorkItem[];
 }
 
+// Alias for backwards compatibility
+export type FrameTasks = FrameWorkItems & { tasks: WorkItem[] };
+
 export interface GenerateResponse {
-  frameTasks: FrameTasks[];
+  workItemType: WorkItemType;
+  frameWorkItems: FrameWorkItems[];
+  // For backwards compatibility
+  frameTasks?: FrameWorkItems[];
 }
 
 export interface AzureTask {
@@ -74,6 +106,42 @@ export interface AzureTask {
   tags: string[];
   state: 'New';
   assignedTo?: string;
+}
+
+export interface AzureUserStory {
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  parentEpicId: number;
+  tags: string[];
+  state: 'New';
+}
+
+export interface UserStoryToCreate {
+  workItemId: string;
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  parentEpicId: number;
+  tags: string[];
+}
+
+export interface CreateUserStoryResult {
+  workItemId: string;
+  success: boolean;
+  azureId?: number;
+  url?: string;
+  error?: string;
+}
+
+export interface AzureWorkItemDetails {
+  id: number;
+  type: 'Epic' | 'Feature' | 'User Story' | 'Task';
+  title: string;
+  description?: string;
+  acceptanceCriteria?: string;
+  state: string;
+  parentId?: number;
 }
 
 export interface TaskToCreate {

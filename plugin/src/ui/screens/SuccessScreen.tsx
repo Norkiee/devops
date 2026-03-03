@@ -1,10 +1,13 @@
 import React from 'react';
-import { CreateTaskResult } from '../types';
+import { CreateTaskResult, CreateUserStoryResult, WorkItemType } from '../types';
 import { Button } from '../components/Button';
 
+type SubmitResult = CreateTaskResult | CreateUserStoryResult;
+
 interface SuccessScreenProps {
-  results: CreateTaskResult[];
-  storyTitle: string;
+  results: SubmitResult[];
+  workItemType?: WorkItemType;
+  parentTitle: string;
   tags: string[];
   onViewInAzure: () => void;
   onCreateMore: () => void;
@@ -41,21 +44,26 @@ const styles: Record<string, React.CSSProperties> = {
 
 export function SuccessScreen({
   results,
-  storyTitle,
+  workItemType = 'Task',
+  parentTitle,
   tags,
   onViewInAzure,
   onCreateMore,
 }: SuccessScreenProps): React.ReactElement {
   const successCount = results.filter((r) => r.success).length;
+  const isUserStory = workItemType === 'UserStory';
+  const itemLabel = isUserStory ? 'user story' : 'task';
+  const itemLabelPlural = isUserStory ? 'user stories' : 'tasks';
+  const parentLabel = isUserStory ? 'Epic' : 'Story';
 
   return (
     <div className="screen screen-center">
       <div style={styles.icon}>&#10003;</div>
       <h2 style={styles.heading}>
-        {successCount} task{successCount > 1 ? 's' : ''} created!
+        {successCount} {successCount === 1 ? itemLabel : itemLabelPlural} created!
       </h2>
       <p style={styles.detail}>
-        Story: {storyTitle}
+        {parentLabel}: {parentTitle}
         {tags.length > 0 && ` | Tags: ${tags.join(', ')}`}
       </p>
 
@@ -64,7 +72,7 @@ export function SuccessScreen({
           View in Azure DevOps
         </Button>
         <Button onClick={onCreateMore} variant="secondary" fullWidth>
-          Create More Tasks
+          Create More {isUserStory ? 'Stories' : 'Tasks'}
         </Button>
       </div>
     </div>

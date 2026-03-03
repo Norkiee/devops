@@ -1,90 +1,40 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { FrameTasks } from '../types';
 import { Button } from '../components/Button';
 
 interface ConnectAzureScreenProps {
-  frameTasks: FrameTasks[];
+  frameTasks?: FrameTasks[]; // Optional - may not have generated yet
+  frameCount?: number;
   isAuthenticated: boolean;
-  onTaskToggle: (frameId: string, taskId: string) => void;
+  onTaskToggle?: (frameId: string, taskId: string) => void;
   onConnect: () => void;
   onContinue: () => void;
   onBack: () => void;
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  frameGroup: {
+  azureIcon: {
+    width: '48px',
+    height: '48px',
+    margin: '0 auto 12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0078d4',
+    borderRadius: '12px',
+    color: '#ffffff',
+  },
+  badge: {
+    display: 'inline-block',
+    padding: '4px 12px',
+    backgroundColor: '#f3e8ff',
+    color: '#7c3aed',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 500,
     marginBottom: '8px',
   },
-  frameHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 12px',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    userSelect: 'none',
-  },
-  frameHeaderLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  chevron: {
-    fontSize: '12px',
-    color: '#666666',
-    transition: 'transform 0.2s',
-  },
-  frameName: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#333333',
-  },
-  taskCount: {
-    fontSize: '11px',
-    color: '#666666',
-    backgroundColor: '#e0e0e0',
-    padding: '2px 8px',
-    borderRadius: '10px',
-  },
-  taskList: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '4px',
-    marginTop: '6px',
-  },
-  taskItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 8px',
-    backgroundColor: '#ffffff',
-    border: '1px solid #e0e0e0',
-    borderRadius: '6px',
-  },
-  taskItemDeselected: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 8px',
-    backgroundColor: '#f9f9f9',
-    border: '1px solid #e0e0e0',
-    borderRadius: '6px',
-    opacity: 0.5,
-  },
-  checkbox: {
-    width: '16px',
-    height: '16px',
-    cursor: 'pointer',
-    accentColor: '#7c3aed',
-    borderRadius: '4px',
-  },
-  taskTitle: {
-    fontSize: '12px',
-    color: '#333333',
-    flex: 1,
-  },
-  successBadge: {
+  connectedBadge: {
     display: 'inline-block',
     padding: '4px 12px',
     backgroundColor: '#d4edda',
@@ -94,121 +44,66 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     marginBottom: '8px',
   },
-  footerStats: {
-    fontSize: '12px',
-    color: '#666666',
-    textAlign: 'center' as const,
-    marginBottom: '8px',
-  },
 };
 
 export function ConnectAzureScreen({
   frameTasks,
+  frameCount,
   isAuthenticated,
   onTaskToggle,
   onConnect,
   onContinue,
   onBack,
 }: ConnectAzureScreenProps): React.ReactElement {
-  const [expandedFrames, setExpandedFrames] = useState<Set<string>>(
-    new Set(frameTasks.map((ft) => ft.frameId))
-  );
-
-  const toggleFrame = (frameId: string) => {
-    setExpandedFrames((prev) => {
-      const next = new Set(prev);
-      if (next.has(frameId)) {
-        next.delete(frameId);
-      } else {
-        next.add(frameId);
-      }
-      return next;
-    });
-  };
-
-  const totalTasks = frameTasks.reduce((sum, ft) => sum + ft.tasks.length, 0);
-  const selectedCount = frameTasks.reduce(
-    (sum, ft) => sum + ft.tasks.filter((t) => t.selected).length,
-    0
-  );
+  // Calculate counts if frameTasks provided
+  const taskCount = frameTasks?.reduce((sum, ft) => sum + ft.tasks.length, 0) || 0;
+  const displayCount = taskCount > 0 ? `${taskCount} work items ready` : `${frameCount || 0} frames ready`;
 
   return (
-    <div className="screen">
-      <div className="screen-header">
-        <div style={styles.successBadge}>{selectedCount} tasks ready</div>
-        <h2>
-          {isAuthenticated
-            ? 'Connected to Azure DevOps'
-            : 'Connect to Azure DevOps'}
-        </h2>
-        <p>
-          {isAuthenticated
-            ? 'Continue to assign tasks to a story'
-            : 'Sign in to push tasks to your Azure DevOps board'}
-        </p>
+    <div className="screen screen-center">
+      <div style={styles.azureIcon}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M13.05 4.24L6.56 18.05a.5.5 0 00.46.7h10.81a.5.5 0 00.44-.26l3.92-7.4a.5.5 0 00-.02-.5l-7.67-6.35a.5.5 0 00-.45 0z"
+            fill="currentColor"
+          />
+          <path
+            d="M10.95 4.24L4.46 18.05a.5.5 0 01-.46.7H2.73a.5.5 0 01-.44-.74l8.22-14.17a.5.5 0 01.87 0l.15.26a.5.5 0 01-.08.64l.5-.5z"
+            fill="currentColor"
+            opacity="0.6"
+          />
+        </svg>
       </div>
 
-      <div className="task-list">
-        {frameTasks.map((frameTask) => {
-          const isExpanded = expandedFrames.has(frameTask.frameId);
-          const frameSelectedCount = frameTask.tasks.filter((t) => t.selected).length;
-
-          return (
-            <div key={frameTask.frameId} style={styles.frameGroup}>
-              <div
-                style={styles.frameHeader}
-                onClick={() => toggleFrame(frameTask.frameId)}
-              >
-                <div style={styles.frameHeaderLeft}>
-                  <span
-                    style={{
-                      ...styles.chevron,
-                      transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                    }}
-                  >
-                    ▶
-                  </span>
-                  <span style={styles.frameName}>{frameTask.frameName}</span>
-                </div>
-                <span style={styles.taskCount}>
-                  {frameSelectedCount}/{frameTask.tasks.length}
-                </span>
-              </div>
-
-              {isExpanded && (
-                <div style={styles.taskList}>
-                  {frameTask.tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      style={task.selected ? styles.taskItem : styles.taskItemDeselected}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={task.selected}
-                        onChange={() => onTaskToggle(frameTask.frameId, task.id)}
-                        style={styles.checkbox}
-                      />
-                      <span style={styles.taskTitle}>{task.title}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div style={isAuthenticated ? styles.connectedBadge : styles.badge}>
+        {displayCount}
       </div>
 
-      <div className="screen-footer">
-        <div style={styles.footerStats}>
-          {selectedCount} of {totalTasks} tasks selected
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <Button onClick={onConnect} fullWidth disabled={selectedCount === 0}>
-            {isAuthenticated ? 'Reconnect to Azure DevOps' : 'Connect Azure DevOps'}
-          </Button>
-          {isAuthenticated && (
-            <Button onClick={onContinue} fullWidth disabled={selectedCount === 0} variant="secondary">
-              Continue with existing session
+      <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>
+        {isAuthenticated
+          ? 'Connected to Azure DevOps'
+          : 'Connect to Azure DevOps'}
+      </h2>
+      <p style={{ fontSize: '13px', color: '#666666', textAlign: 'center', maxWidth: '280px' }}>
+        {isAuthenticated
+          ? 'Continue to select a parent work item'
+          : 'Sign in to push work items to your Azure DevOps board'}
+      </p>
+
+      <div className="screen-footer" style={{ marginTop: '24px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+          {isAuthenticated ? (
+            <>
+              <Button onClick={onContinue} fullWidth>
+                Continue
+              </Button>
+              <Button onClick={onConnect} fullWidth variant="secondary">
+                Reconnect to Azure DevOps
+              </Button>
+            </>
+          ) : (
+            <Button onClick={onConnect} fullWidth>
+              Connect Azure DevOps
             </Button>
           )}
           <Button onClick={onBack} variant="text" fullWidth>

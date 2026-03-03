@@ -1,4 +1,4 @@
-import { FrameData, FrameTasks, TaskItem } from './types';
+import { FrameData, FrameWorkItems, WorkItem, WorkItemType, HierarchyContext } from './types';
 
 const MAX_RETRIES = 3;
 const INITIAL_DELAY_MS = 1000;
@@ -66,35 +66,89 @@ async function fetchWithRetry(
   throw lastError || new Error('Unknown error during fetch');
 }
 
-const SYSTEM_PROMPT = `You are a design task generator for UI/UX work. Given information about a design frame from Figma, analyze the content and generate clear, actionable design tasks.
+const TASK_SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma and the parent Epic and User Story context, generate clear, actionable development tasks.
 
-Break down the frame into logical design tasks. Generate 1-5 tasks depending on complexity:
-- Simple frames (few elements, single purpose): 1-2 tasks
-- Medium frames (forms, multiple sections): 2-3 tasks
-- Complex frames (dashboards, multi-feature screens): 3-5 tasks
+Context:
+- You will receive the Epic title/description and User Story title/description/acceptance criteria
+- Tasks should help implement the User Story
+- Tasks should align with the acceptance criteria
+
+Generate 1-5 Tasks per frame depending on complexity:
+- Simple frames (few elements): 1-2 tasks
+- Medium frames (forms, sections): 2-3 tasks
+- Complex frames (dashboards): 3-5 tasks
 
 Guidelines:
-- Each task should represent a meaningful design deliverable
-- Task titles should be concise and action-oriented (start with a verb like "Design", "Create", "Define", "Refine", "Specify")
-- Descriptions should be 2-3 sentences covering the design work needed and key considerations
-- Don't create tasks that are too granular (e.g., "Choose button color" is too small)
-- Don't create tasks that are too broad (e.g., "Design the entire screen")
-- Group related design elements into cohesive tasks
-- Focus on design deliverables: layouts, components, states, interactions, specifications
-- Consider visual design, interaction patterns, responsive behavior, and accessibility
-- Do not include estimates or assignees
-- Keep language professional and clear
+- Task titles should be concise and action-oriented (start with a verb)
+- Descriptions should be 2-3 sentences covering what to build
+- Reference specific UI elements from the frame
+- Don't create tasks too granular ("Style button") or too broad ("Build screen")
+- Group related work into cohesive tasks
+- Consider the acceptance criteria when defining tasks
 
 Output JSON format:
 {
   "tasks": [
-    { "title": "string", "description": "string" },
     { "title": "string", "description": "string" }
   ]
 }`;
 
-function buildUserPrompt(frame: FrameData, context?: string): string {
-  return `Frame name: ${frame.name}
+const USER_STORY_SYSTEM_PROMPT = `You are a product requirements generator for UI/UX design work. Given information about a design frame from Figma and the parent Epic context, generate clear User Stories in the standard format.
+
+Context:
+- You will receive the Epic title and description that these stories belong to
+- Each story should contribute to the Epic's goals
+- Stories should be independently deliverable
+
+Generate 1-3 User Stories per frame depending on complexity:
+- Simple frames (single purpose): 1 story
+- Medium frames (multiple features): 2 stories
+- Complex frames (many interactions): 3 stories
+
+Guidelines:
+- Title format: "User can [action]" or "[User type] can [action]"
+- Description format: "As a [user], I want to [action] so that [benefit]"
+- Include acceptance criteria as bullet points
+- Each story should be testable and deliverable
+- Focus on user value, not implementation details
+- Keep scope reasonable (not too broad, not too narrow)
+
+Output JSON format:
+{
+  "stories": [
+    {
+      "title": "string",
+      "description": "string",
+      "acceptanceCriteria": "string (bullet points separated by newlines)"
+    }
+  ]
+}`;
+
+// Backwards compatibility alias
+const SYSTEM_PROMPT = TASK_SYSTEM_PROMPT;
+
+function buildTaskPrompt(
+  frame: FrameData,
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): string {
+  const epicSection = hierarchyContext?.epic
+    ? `Epic: ${hierarchyContext.epic.title}
+Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
+
+`
+    : '';
+
+  const storySection = hierarchyContext?.userStory
+    ? `User Story: ${hierarchyContext.userStory.title}
+Story Description: ${hierarchyContext.userStory.description || 'Not provided'}
+Acceptance Criteria: ${hierarchyContext.userStory.acceptanceCriteria || 'Not provided'}
+
+`
+    : '';
+
+  return `${epicSection}${storySection}Frame name: ${frame.name}
+${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
 Text content found: ${frame.textContent.join(', ') || 'None'}
 Components used: ${frame.componentNames.join(', ') || 'None'}
 Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
@@ -102,7 +156,36 @@ Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Analyze this design frame and generate appropriate design tasks. Consider the complexity and break it down into logical, independently deliverable units of design work.`;
+Generate development tasks for this design frame that help implement the User Story.`;
+}
+
+function buildUserStoryPrompt(
+  frame: FrameData,
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): string {
+  const epicSection = hierarchyContext?.epic
+    ? `Epic: ${hierarchyContext.epic.title}
+Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
+
+`
+    : '';
+
+  return `${epicSection}Frame name: ${frame.name}
+${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
+Text content found: ${frame.textContent.join(', ') || 'None'}
+Components used: ${frame.componentNames.join(', ') || 'None'}
+Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
+Dimensions: ${frame.width}x${frame.height}
+
+${context ? `Additional context: ${context}` : ''}
+
+Generate User Stories for this design frame that contribute to the Epic's goals.`;
+}
+
+// Backwards compatibility
+function buildUserPrompt(frame: FrameData, context?: string): string {
+  return buildTaskPrompt(frame, context);
 }
 
 function extractJson(text: string): string {
@@ -149,7 +232,18 @@ function extractJson(text: string): string {
   throw new Error('Unbalanced JSON braces in Claude response');
 }
 
-function parseResponse(text: string): Array<{ title: string; description: string }> {
+interface ParsedTask {
+  title: string;
+  description: string;
+}
+
+interface ParsedUserStory {
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+}
+
+function parseTaskResponse(text: string): ParsedTask[] {
   const jsonStr = extractJson(text);
   let parsed: unknown;
 
@@ -183,14 +277,65 @@ function parseResponse(text: string): Array<{ title: string; description: string
   });
 }
 
-export async function generateTasksForFrame(
+function parseUserStoryResponse(text: string): ParsedUserStory[] {
+  const jsonStr = extractJson(text);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (err) {
+    throw new Error(`Invalid JSON in Claude response: ${err instanceof Error ? err.message : 'parse error'}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Claude response is not a JSON object');
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (!obj.stories || !Array.isArray(obj.stories)) {
+    throw new Error('Missing stories array in Claude response');
+  }
+
+  return obj.stories.map((story: unknown, index: number) => {
+    if (!story || typeof story !== 'object') {
+      throw new Error(`Story ${index}: Invalid story object`);
+    }
+    const s = story as Record<string, unknown>;
+    if (typeof s.title !== 'string' || !s.title) {
+      throw new Error(`Story ${index}: Missing or invalid title`);
+    }
+    if (typeof s.description !== 'string' || !s.description) {
+      throw new Error(`Story ${index}: Missing or invalid description`);
+    }
+    return {
+      title: s.title,
+      description: s.description,
+      acceptanceCriteria: typeof s.acceptanceCriteria === 'string' ? s.acceptanceCriteria : undefined,
+    };
+  });
+}
+
+// Backwards compatibility alias
+function parseResponse(text: string): ParsedTask[] {
+  return parseTaskResponse(text);
+}
+
+export async function generateWorkItemsForFrame(
   frame: FrameData,
-  context?: string
-): Promise<FrameTasks> {
+  workItemType: WorkItemType = 'Task',
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): Promise<FrameWorkItems> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
+
+  const isUserStory = workItemType === 'UserStory';
+  const systemPrompt = isUserStory ? USER_STORY_SYSTEM_PROMPT : TASK_SYSTEM_PROMPT;
+  const userPrompt = isUserStory
+    ? buildUserStoryPrompt(frame, context, hierarchyContext)
+    : buildTaskPrompt(frame, context, hierarchyContext);
 
   // Use fetch with retry logic for transient errors (429, 503, 529)
   const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
@@ -202,9 +347,9 @@ export async function generateTasksForFrame(
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(frame, context) }],
+      max_tokens: 1500, // Slightly more for acceptance criteria
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
     }),
   });
 
@@ -223,18 +368,44 @@ export async function generateTasksForFrame(
   }
 
   const responseText = firstContent.text;
-  const parsedTasks = parseResponse(responseText);
 
-  const tasks: TaskItem[] = parsedTasks.map((task, index) => ({
-    id: `${frame.id}-${index + 1}`,
-    title: task.title,
-    description: task.description,
-    selected: true,
-  }));
+  let workItems: WorkItem[];
+
+  if (isUserStory) {
+    const parsedStories = parseUserStoryResponse(responseText);
+    workItems = parsedStories.map((story, index) => ({
+      id: `${frame.id}-${index + 1}`,
+      title: story.title,
+      description: story.description,
+      acceptanceCriteria: story.acceptanceCriteria,
+      selected: true,
+    }));
+  } else {
+    const parsedTasks = parseTaskResponse(responseText);
+    workItems = parsedTasks.map((task, index) => ({
+      id: `${frame.id}-${index + 1}`,
+      title: task.title,
+      description: task.description,
+      selected: true,
+    }));
+  }
 
   return {
     frameId: frame.id,
     frameName: frame.name,
-    tasks,
+    sectionName: frame.sectionName,
+    workItems,
+  };
+}
+
+// Backwards compatibility - generates tasks only
+export async function generateTasksForFrame(
+  frame: FrameData,
+  context?: string
+): Promise<FrameWorkItems & { tasks: WorkItem[] }> {
+  const result = await generateWorkItemsForFrame(frame, 'Task', context);
+  return {
+    ...result,
+    tasks: result.workItems, // Alias for backwards compatibility
   };
 }

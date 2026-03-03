@@ -1,11 +1,23 @@
 interface FrameData {
   id: string;
   name: string;
+  sectionName?: string;
   textContent: string[];
   componentNames: string[];
   nestedFrameNames: string[];
   width: number;
   height: number;
+}
+
+interface SectionData {
+  id: string;
+  name: string;
+  frameCount: number;
+}
+
+interface SelectionResult {
+  frames: FrameData[];
+  sections: SectionData[];
 }
 
 function extractTextContent(node: SceneNode): string[] {
@@ -70,10 +82,11 @@ function extractNestedFrameNames(node: SceneNode): string[] {
   return frameNames.slice(0, 10);
 }
 
-function buildFrameData(frame: FrameNode): FrameData {
+function buildFrameData(frame: FrameNode, sectionName?: string): FrameData {
   return {
     id: frame.id,
     name: frame.name,
+    sectionName,
     textContent: extractTextContent(frame),
     componentNames: extractComponentNames(frame),
     nestedFrameNames: extractNestedFrameNames(frame),
@@ -82,18 +95,41 @@ function buildFrameData(frame: FrameNode): FrameData {
   };
 }
 
-function getSelectedFrames(): FrameData[] {
-  return figma.currentPage.selection
-    .filter((node): node is FrameNode => node.type === 'FRAME')
-    .map(buildFrameData);
+function getSelectedFrames(): SelectionResult {
+  const frames: FrameData[] = [];
+  const sections: SectionData[] = [];
+
+  for (const node of figma.currentPage.selection) {
+    if (node.type === 'FRAME') {
+      // Direct frame selection
+      frames.push(buildFrameData(node));
+    } else if (node.type === 'SECTION') {
+      // Section selected - get all child frames
+      const sectionFrames = node.children
+        .filter((child): child is FrameNode => child.type === 'FRAME');
+
+      sections.push({
+        id: node.id,
+        name: node.name,
+        frameCount: sectionFrames.length,
+      });
+
+      // Add frames with section name
+      for (const frame of sectionFrames) {
+        frames.push(buildFrameData(frame, node.name));
+      }
+    }
+  }
+
+  return { frames, sections };
 }
 
 figma.showUI(__html__, { width: 500, height: 520 });
 
 figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number }) => {
   if (msg.type === 'get-selection') {
-    const frames = getSelectedFrames();
-    figma.ui.postMessage({ type: 'selection', frames });
+    const { frames, sections } = getSelectedFrames();
+    figma.ui.postMessage({ type: 'selection', frames, sections });
   }
 
   if (msg.type === 'get-storage') {
@@ -112,8 +148,11 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
 };
 
 figma.on('selectionchange', () => {
-  const count = figma.currentPage.selection.filter(
-    (node) => node.type === 'FRAME'
-  ).length;
-  figma.ui.postMessage({ type: 'selection-count', count });
+  const { frames, sections } = getSelectedFrames();
+  figma.ui.postMessage({
+    type: 'selection-changed',
+    frameCount: frames.length,
+    sectionCount: sections.length,
+    sections,
+  });
 });

@@ -3,6 +3,7 @@ import { Button } from '../components/Button';
 
 interface HomeScreenProps {
   frameCount: number;
+  sectionCount?: number;
   onContinue: () => void;
 }
 
@@ -33,6 +34,7 @@ const styles: Record<string, React.CSSProperties> = {
 
 export function HomeScreen({
   frameCount,
+  sectionCount = 0,
   onContinue,
 }: HomeScreenProps): React.ReactElement {
   useEffect(() => {
@@ -41,6 +43,13 @@ export function HomeScreen({
       '*'
     );
   }, []);
+
+  const getButtonText = () => {
+    if (sectionCount > 0) {
+      return `Continue with ${sectionCount} section${sectionCount > 1 ? 's' : ''} (${frameCount} frame${frameCount > 1 ? 's' : ''})`;
+    }
+    return `Continue with ${frameCount} frame${frameCount > 1 ? 's' : ''}`;
+  };
 
   return (
     <div className="screen" style={{ alignItems: 'center', textAlign: 'center' }}>
@@ -51,15 +60,15 @@ export function HomeScreen({
           <div style={styles.iconSquare} />
           <div style={styles.iconSquare} />
         </div>
-        <h2 style={styles.heading}>Select frames to start</h2>
+        <h2 style={styles.heading}>Select frames or sections</h2>
         <p style={styles.subtext}>
-          Select one or more frames in Figma to generate Azure DevOps tasks
+          Select frames or sections in Figma to generate Azure DevOps work items
         </p>
       </div>
       {frameCount > 0 && (
         <div style={{ width: '100%' }}>
           <Button onClick={onContinue} fullWidth>
-            Continue with {frameCount} frame{frameCount > 1 ? 's' : ''}
+            {getButtonText()}
           </Button>
         </div>
       )}

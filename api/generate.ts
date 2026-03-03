@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { generateTasksForFrame } from './_lib/claude';
-import { FrameData, FrameTasks } from './_lib/types';
+import { generateWorkItemsForFrame } from './_lib/claude';
+import { FrameData, FrameWorkItems, WorkItemType, HierarchyContext } from './_lib/types';
 import { handleCors } from './_lib/auth';
 
 // Validation limits
@@ -59,9 +59,19 @@ function validateFrameData(frame: unknown, index: number): FrameData {
       .slice(0, MAX_NESTED_FRAME_NAMES);
   }
 
+  // Validate optional sectionName
+  let sectionName: string | undefined;
+  if (f.sectionName !== undefined) {
+    if (typeof f.sectionName !== 'string') {
+      throw new Error(`Frame ${index}: sectionName must be a string`);
+    }
+    sectionName = f.sectionName.slice(0, MAX_FRAME_NAME_LENGTH);
+  }
+
   return {
     id: f.id,
     name,
+    sectionName,
     textContent,
     componentNames,
     nestedFrameNames,
@@ -85,6 +95,8 @@ export default async function handler(
     const body = req.body as {
       frames?: unknown;
       context?: unknown;
+      workItemType?: unknown;
+      hierarchyContext?: unknown;
     };
 
     if (!body.frames || !Array.isArray(body.frames) || body.frames.length === 0) {
@@ -112,11 +124,42 @@ export default async function handler(
       context = body.context.slice(0, MAX_CONTEXT_LENGTH);
     }
 
-    const frameTasks: FrameTasks[] = await Promise.all(
-      frames.map((frame) => generateTasksForFrame(frame, context))
+    // Validate workItemType - default to 'Task' for backwards compatibility
+    let workItemType: WorkItemType = 'Task';
+    if (body.workItemType !== undefined) {
+      if (body.workItemType !== 'UserStory' && body.workItemType !== 'Task') {
+        res.status(400).json({ error: 'workItemType must be "UserStory" or "Task"' });
+        return;
+      }
+      workItemType = body.workItemType;
+    }
+
+    // Validate hierarchyContext if provided
+    let hierarchyContext: HierarchyContext | undefined;
+    if (body.hierarchyContext !== undefined) {
+      if (typeof body.hierarchyContext !== 'object' || body.hierarchyContext === null) {
+        res.status(400).json({ error: 'hierarchyContext must be an object' });
+        return;
+      }
+      hierarchyContext = body.hierarchyContext as HierarchyContext;
+    }
+
+    const frameWorkItems: FrameWorkItems[] = await Promise.all(
+      frames.map((frame) =>
+        generateWorkItemsForFrame(frame, workItemType, context, hierarchyContext)
+      )
     );
 
-    res.status(200).json({ frameTasks });
+    // Return response with backwards-compatible frameTasks alias
+    res.status(200).json({
+      workItemType,
+      frameWorkItems,
+      // Backwards compatibility: provide frameTasks with tasks property
+      frameTasks: frameWorkItems.map((fwi) => ({
+        ...fwi,
+        tasks: fwi.workItems,
+      })),
+    });
   } catch (error) {
     console.error('Generate error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';

@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryStories } from '../_lib/azure';
+import { queryStories, queryStoriesByEpic } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
 export default async function handler(
@@ -22,12 +22,28 @@ export default async function handler(
     return;
   }
 
+  // Optional epicId filter - when provided, only return User Stories under that Epic
+  const epicId = req.query.epicId;
+  const epicIdNum = epicId && typeof epicId === 'string' ? parseInt(epicId, 10) : undefined;
+
   try {
-    const stories = await queryStories({
-      org: auth.org,
-      accessToken: auth.accessToken,
-      projectId,
-    });
+    let stories;
+    if (epicIdNum && !isNaN(epicIdNum)) {
+      // Fetch User Stories under the specified Epic
+      stories = await queryStoriesByEpic({
+        org: auth.org,
+        accessToken: auth.accessToken,
+        projectId,
+        epicId: epicIdNum,
+      });
+    } else {
+      // Fetch all work items (Epics, Features, User Stories) - existing behavior
+      stories = await queryStories({
+        org: auth.org,
+        accessToken: auth.accessToken,
+        projectId,
+      });
+    }
     res.status(200).json({ stories });
   } catch (error) {
     console.error('Stories error:', error);

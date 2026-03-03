@@ -1,9 +1,10 @@
 import React from 'react';
-import { TaskToSubmit } from '../types';
+import { TaskToSubmit, WorkItemType } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface SubmittingScreenProps {
   tasks: TaskToSubmit[];
+  workItemType?: WorkItemType;
   completedTaskIds: Set<string>;
 }
 
@@ -22,12 +23,15 @@ const styles: Record<string, React.CSSProperties> = {
 
 export function SubmittingScreen({
   tasks,
+  workItemType = 'Task',
   completedTaskIds,
 }: SubmittingScreenProps): React.ReactElement {
+  const itemLabel = workItemType === 'UserStory' ? 'user stories' : 'tasks';
+
   return (
     <div className="screen screen-center">
       <LoadingSpinner
-        label="Creating tasks..."
+        label={`Creating ${itemLabel}...`}
         sublabel="Pushing to Azure DevOps"
       />
       <div className="progress-list" style={{ marginTop: '16px' }}>

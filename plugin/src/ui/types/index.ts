@@ -1,6 +1,25 @@
+// Work item types that can be generated
+export type WorkItemType = 'UserStory' | 'Task';
+
+// Hierarchy context for AI generation
+export interface HierarchyContext {
+  epic?: {
+    id: number;
+    title: string;
+    description?: string;
+  };
+  userStory?: {
+    id: number;
+    title: string;
+    description?: string;
+    acceptanceCriteria?: string;
+  };
+}
+
 export interface FrameData {
   id: string;
   name: string;
+  sectionName?: string; // Which Figma section this frame belongs to
   textContent: string[];
   componentNames: string[];
   nestedFrameNames: string[];
@@ -8,17 +27,36 @@ export interface FrameData {
   height: number;
 }
 
-export interface TaskItem {
+export interface SectionData {
+  id: string;
+  name: string;
+  frames: FrameData[];
+}
+
+export interface WorkItem {
   id: string;
   title: string;
   description: string;
+  acceptanceCriteria?: string; // Only for User Stories
   selected: boolean;
 }
 
+// Alias for backwards compatibility
+export type TaskItem = WorkItem;
+
+export interface FrameWorkItems {
+  frameId: string;
+  frameName: string;
+  sectionName?: string;
+  workItems: WorkItem[];
+}
+
+// Alias for backwards compatibility - FrameTasks uses 'tasks' property
 export interface FrameTasks {
   frameId: string;
   frameName: string;
-  tasks: TaskItem[];
+  sectionName?: string;
+  tasks: WorkItem[];
 }
 
 export interface AzureProject {
@@ -49,10 +87,39 @@ export interface CreateTaskResult {
   error?: string;
 }
 
+export interface UserStoryToSubmit {
+  workItemId: string;
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  tags: string[];
+  parentEpicId: number;
+}
+
+export interface CreateUserStoryResult {
+  workItemId: string;
+  success: boolean;
+  azureId?: number;
+  url?: string;
+  error?: string;
+}
+
+export interface AzureWorkItemDetails {
+  id: number;
+  type: 'Epic' | 'Feature' | 'User Story' | 'Task';
+  title: string;
+  description?: string;
+  acceptanceCriteria?: string;
+  state: string;
+  parentId?: number;
+}
+
 export interface PluginStorage {
   azureProjectId?: string;
   azureOrg?: string;
   lastStoryId?: number;
+  lastEpicId?: number;
+  lastWorkItemType?: WorkItemType;
   frequentTags?: string[];
   sessionId?: string;
   // Note: accessToken is stored for session persistence across plugin restarts.
@@ -62,10 +129,12 @@ export interface PluginStorage {
 
 export type Screen =
   | 'home'
+  | 'work-item-type'
   | 'context'
   | 'generating'
   | 'connect-azure'
-  | 'select-story'
+  | 'select-parent'
+  | 'select-story' // Kept for backwards compatibility, replaced by select-parent
   | 'review'
   | 'submitting'
   | 'success'

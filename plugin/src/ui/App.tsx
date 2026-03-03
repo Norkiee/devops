@@ -2,79 +2,85 @@ import React, { useState, useCallback } from 'react';
 import {
   Screen,
   FrameData,
-  FrameTasks,
-  TaskItem,
+  FrameWorkItems,
+  WorkItem,
+  WorkItemType,
+  HierarchyContext,
   TaskToSubmit,
+  UserStoryToSubmit,
   CreateTaskResult,
+  CreateUserStoryResult,
 } from './types';
 import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { generateTasks, createTasks, AuthError } from './services/api';
+import { generateWorkItems, createTasks, createUserStories } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
+import { WorkItemTypeScreen } from './screens/WorkItemTypeScreen';
 import { ContextScreen } from './screens/ContextScreen';
 import { GeneratingScreen } from './screens/GeneratingScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
-import { SelectStoryScreen } from './screens/SelectStoryScreen';
+import { SelectParentScreen } from './screens/SelectParentScreen';
 import { ReviewScreen } from './screens/ReviewScreen';
 import { SubmittingScreen } from './screens/SubmittingScreen';
 import { SuccessScreen } from './screens/SuccessScreen';
 import { PartialFailureScreen } from './screens/PartialFailureScreen';
 
+// Union type for results (tasks or user stories)
+type SubmitResult = CreateTaskResult | CreateUserStoryResult;
+
 export function App(): React.ReactElement {
   const [screen, setScreen] = useState<Screen>('home');
   const [error, setError] = useState<string | null>(null);
 
-  const { frames, frameCount, requestFrames } = useFrameSelection();
+  const { frames, sections, frameCount, sectionCount, requestFrames } = useFrameSelection();
   const auth = useAzureAuth();
   const { storage, updateStorage } = usePluginStorage();
   const containerRef = useAutoResize();
 
-  const [frameTasks, setFrameTasks] = useState<FrameTasks[]>([]);
-  const [completedFrameIds, setCompletedFrameIds] = useState<Set<string>>(
-    new Set()
+  // Work item type and hierarchy
+  const [workItemType, setWorkItemType] = useState<WorkItemType>(
+    storage.lastWorkItemType || 'Task'
   );
-  const [storyTitle, setStoryTitle] = useState('');
+  const [hierarchyContext, setHierarchyContext] = useState<HierarchyContext>({});
+
+  // Generated work items
+  const [frameWorkItems, setFrameWorkItems] = useState<FrameWorkItems[]>([]);
+  const [completedFrameIds, setCompletedFrameIds] = useState<Set<string>>(new Set());
+
+  // Azure connection state
+  const [parentTitle, setParentTitle] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [parentStoryId, setParentStoryId] = useState<number>(0);
   const [azureOrg, setAzureOrg] = useState('');
   const [azureProjectId, setAzureProjectId] = useState('');
-  const [submittedTaskIds, setSubmittedTaskIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [results, setResults] = useState<CreateTaskResult[]>([]);
+
+  // Submission state
+  const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<SubmitResult[]>([]);
+
+  // Flow: home → work-item-type → connect-azure → select-parent → context → generating → review → submitting → success
 
   const handleContinueFromHome = useCallback(() => {
     requestFrames();
-    setScreen('context');
+    setScreen('work-item-type');
   }, [requestFrames]);
 
-  const handleGenerate = useCallback(
-    async (context?: string) => {
-      setScreen('generating');
-      setCompletedFrameIds(new Set());
-      setError(null);
+  const handleSelectWorkItemType = useCallback((type: WorkItemType) => {
+    setWorkItemType(type);
+    updateStorage({ lastWorkItemType: type });
 
-      try {
-        const generatedFrameTasks = await generateTasks(frames, context);
-        setFrameTasks(generatedFrameTasks);
-        setCompletedFrameIds(new Set(generatedFrameTasks.map((ft) => ft.frameId)));
-
-        // Always show connect screen so users can reconnect if needed
-        setScreen('connect-azure');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Generation failed');
-        setScreen('context');
-      }
-    },
-    [frames]
-  );
+    // Check if already authenticated
+    if (auth.isAuthenticated) {
+      setScreen('select-parent');
+    } else {
+      setScreen('connect-azure');
+    }
+  }, [auth.isAuthenticated, updateStorage]);
 
   const handleConnectAzure = useCallback(() => {
     auth.startAuth(() => {
-      // Navigate to select-story after auth completes
-      setScreen('select-story');
+      setScreen('select-parent');
     });
   }, [auth]);
 
@@ -83,115 +89,162 @@ export function App(): React.ReactElement {
     setScreen('connect-azure');
   }, [auth]);
 
-  const getTotalTaskCount = useCallback(() => {
-    return frameTasks.reduce((sum, ft) => sum + ft.tasks.length, 0);
-  }, [frameTasks]);
-
-  const handleStorySelected = useCallback(
+  const handleParentSelected = useCallback(
     (selection: {
       org: string;
       projectId: string;
-      storyId: number;
-      storyTitle: string;
+      hierarchyContext: HierarchyContext;
       selectedTags: string[];
+      parentTitle: string;
     }) => {
       setAzureOrg(selection.org);
       setAzureProjectId(selection.projectId);
-      setStoryTitle(selection.storyTitle);
+      setHierarchyContext(selection.hierarchyContext);
       setSelectedTags(selection.selectedTags);
-      setParentStoryId(selection.storyId);
+      setParentTitle(selection.parentTitle);
 
+      // Save to storage
       updateStorage({
         azureOrg: selection.org,
         azureProjectId: selection.projectId,
-        lastStoryId: selection.storyId,
+        lastEpicId: selection.hierarchyContext.epic?.id,
+        lastStoryId: selection.hierarchyContext.userStory?.id,
         frequentTags: selection.selectedTags.slice(0, 5),
       });
 
-      setScreen('review');
+      setScreen('context');
     },
     [updateStorage]
   );
 
-  const handleTaskUpdate = useCallback(
-    (frameId: string, taskId: string, updates: Partial<TaskItem>) => {
-      setFrameTasks((prev) =>
-        prev.map((ft) =>
-          ft.frameId === frameId
+  const handleGenerate = useCallback(
+    async (context?: string) => {
+      setScreen('generating');
+      setCompletedFrameIds(new Set());
+      setError(null);
+
+      try {
+        const { frameWorkItems: generated } = await generateWorkItems(
+          frames,
+          workItemType,
+          context,
+          hierarchyContext
+        );
+        setFrameWorkItems(generated);
+        setCompletedFrameIds(new Set(generated.map((fwi) => fwi.frameId)));
+        setScreen('review');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Generation failed');
+        setScreen('context');
+      }
+    },
+    [frames, workItemType, hierarchyContext]
+  );
+
+  const getTotalWorkItemCount = useCallback(() => {
+    return frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
+  }, [frameWorkItems]);
+
+  const handleWorkItemUpdate = useCallback(
+    (frameId: string, workItemId: string, updates: Partial<WorkItem>) => {
+      setFrameWorkItems((prev) =>
+        prev.map((fwi) =>
+          fwi.frameId === frameId
             ? {
-                ...ft,
-                tasks: ft.tasks.map((task) =>
-                  task.id === taskId ? { ...task, ...updates } : task
+                ...fwi,
+                workItems: fwi.workItems.map((item) =>
+                  item.id === workItemId ? { ...item, ...updates } : item
                 ),
               }
-            : ft
+            : fwi
         )
       );
     },
     []
   );
 
-  const handleTaskToggle = useCallback((frameId: string, taskId: string) => {
-    setFrameTasks((prev) =>
-      prev.map((ft) =>
-        ft.frameId === frameId
+  const handleWorkItemToggle = useCallback((frameId: string, workItemId: string) => {
+    setFrameWorkItems((prev) =>
+      prev.map((fwi) =>
+        fwi.frameId === frameId
           ? {
-              ...ft,
-              tasks: ft.tasks.map((task) =>
-                task.id === taskId ? { ...task, selected: !task.selected } : task
+              ...fwi,
+              workItems: fwi.workItems.map((item) =>
+                item.id === workItemId ? { ...item, selected: !item.selected } : item
               ),
             }
-          : ft
+          : fwi
       )
     );
   }, []);
 
   const handleRemoveTag = useCallback(
-    (frameId: string, taskId: string, tag: string) => {
-      // For now, tags are shared across all tasks, so we remove from selectedTags
+    (frameId: string, workItemId: string, tag: string) => {
       setSelectedTags((prev) => prev.filter((t) => t !== tag));
     },
     []
   );
 
-  const getSelectedTasks = useCallback((): TaskToSubmit[] => {
-    const tasks: TaskToSubmit[] = [];
-    for (const ft of frameTasks) {
-      for (const task of ft.tasks) {
-        if (task.selected) {
-          tasks.push({
-            taskId: task.id,
-            title: task.title,
-            description: task.description,
-            tags: selectedTags,
-            parentStoryId,
-          });
+  const getSelectedWorkItems = useCallback(() => {
+    const items: WorkItem[] = [];
+    for (const fwi of frameWorkItems) {
+      for (const item of fwi.workItems) {
+        if (item.selected) {
+          items.push(item);
         }
       }
     }
-    return tasks;
-  }, [frameTasks, selectedTags, parentStoryId]);
+    return items;
+  }, [frameWorkItems]);
 
   const handleSubmit = useCallback(async () => {
-    const tasksToSubmit = getSelectedTasks();
-    if (tasksToSubmit.length === 0) return;
+    const selectedItems = getSelectedWorkItems();
+    if (selectedItems.length === 0) return;
 
     setScreen('submitting');
-    setSubmittedTaskIds(new Set());
+    setSubmittedIds(new Set());
 
     try {
-      const taskResults = await createTasks(
-        auth.accessToken!,
-        azureOrg,
-        azureProjectId,
-        tasksToSubmit
-      );
-      setResults(taskResults);
+      let submitResults: SubmitResult[];
 
-      const allTaskIds = new Set(tasksToSubmit.map((t) => t.taskId));
-      setSubmittedTaskIds(allTaskIds);
+      if (workItemType === 'UserStory') {
+        // Create user stories
+        const stories: UserStoryToSubmit[] = selectedItems.map((item) => ({
+          workItemId: item.id,
+          title: item.title,
+          description: item.description,
+          acceptanceCriteria: item.acceptanceCriteria,
+          tags: selectedTags,
+          parentEpicId: hierarchyContext.epic!.id,
+        }));
+        submitResults = await createUserStories(
+          auth.accessToken!,
+          azureOrg,
+          azureProjectId,
+          stories
+        );
+      } else {
+        // Create tasks
+        const tasks: TaskToSubmit[] = selectedItems.map((item) => ({
+          taskId: item.id,
+          title: item.title,
+          description: item.description,
+          tags: selectedTags,
+          parentStoryId: hierarchyContext.userStory!.id,
+        }));
+        submitResults = await createTasks(
+          auth.accessToken!,
+          azureOrg,
+          azureProjectId,
+          tasks
+        );
+      }
 
-      const allSuccess = taskResults.every((r) => r.success);
+      setResults(submitResults);
+      const allIds = new Set(selectedItems.map((item) => item.id));
+      setSubmittedIds(allIds);
+
+      const allSuccess = submitResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
     } catch (err) {
       if (err instanceof Error && err.name === 'AuthError') {
@@ -201,39 +254,75 @@ export function App(): React.ReactElement {
         setScreen('review');
       }
     }
-  }, [getSelectedTasks, auth.accessToken, azureOrg, azureProjectId, handleSessionExpired]);
+  }, [
+    getSelectedWorkItems,
+    workItemType,
+    selectedTags,
+    hierarchyContext,
+    auth.accessToken,
+    azureOrg,
+    azureProjectId,
+    handleSessionExpired,
+  ]);
 
   const handleRetry = useCallback(async () => {
-    const tasksToSubmit = getSelectedTasks();
-    const failedTaskIds = results
-      .filter((r) => !r.success)
-      .map((r) => r.taskId);
-    const failedTasks = tasksToSubmit.filter((t) =>
-      failedTaskIds.includes(t.taskId)
+    const selectedItems = getSelectedWorkItems();
+    const failedIds = results.filter((r) => !r.success).map((r) =>
+      'workItemId' in r ? r.workItemId : r.taskId
     );
+    const failedItems = selectedItems.filter((item) => failedIds.includes(item.id));
 
-    if (failedTasks.length === 0) return;
+    if (failedItems.length === 0) return;
 
     setScreen('submitting');
-    setSubmittedTaskIds(new Set());
+    setSubmittedIds(new Set());
 
     try {
-      const retryResults = await createTasks(
-        auth.accessToken!,
-        azureOrg,
-        azureProjectId,
-        failedTasks
-      );
+      let retryResults: SubmitResult[];
+
+      if (workItemType === 'UserStory') {
+        const stories: UserStoryToSubmit[] = failedItems.map((item) => ({
+          workItemId: item.id,
+          title: item.title,
+          description: item.description,
+          acceptanceCriteria: item.acceptanceCriteria,
+          tags: selectedTags,
+          parentEpicId: hierarchyContext.epic!.id,
+        }));
+        retryResults = await createUserStories(
+          auth.accessToken!,
+          azureOrg,
+          azureProjectId,
+          stories
+        );
+      } else {
+        const tasks: TaskToSubmit[] = failedItems.map((item) => ({
+          taskId: item.id,
+          title: item.title,
+          description: item.description,
+          tags: selectedTags,
+          parentStoryId: hierarchyContext.userStory!.id,
+        }));
+        retryResults = await createTasks(
+          auth.accessToken!,
+          azureOrg,
+          azureProjectId,
+          tasks
+        );
+      }
 
       // Merge results
       const updatedResults = results.map((r) => {
-        const retryResult = retryResults.find((rr) => rr.taskId === r.taskId);
+        const id = 'workItemId' in r ? r.workItemId : r.taskId;
+        const retryResult = retryResults.find((rr) =>
+          ('workItemId' in rr ? rr.workItemId : rr.taskId) === id
+        );
         return retryResult || r;
       });
       setResults(updatedResults);
 
-      const allTaskIds = new Set(tasksToSubmit.map((t) => t.taskId));
-      setSubmittedTaskIds(allTaskIds);
+      const allIds = new Set(selectedItems.map((item) => item.id));
+      setSubmittedIds(allIds);
 
       const allSuccess = updatedResults.every((r) => r.success);
       setScreen(allSuccess ? 'success' : 'partial-failure');
@@ -245,31 +334,50 @@ export function App(): React.ReactElement {
         setScreen('partial-failure');
       }
     }
-  }, [results, getSelectedTasks, auth.accessToken, azureOrg, azureProjectId, handleSessionExpired]);
+  }, [
+    results,
+    getSelectedWorkItems,
+    workItemType,
+    selectedTags,
+    hierarchyContext,
+    auth.accessToken,
+    azureOrg,
+    azureProjectId,
+    handleSessionExpired,
+  ]);
 
   const handleViewInAzure = useCallback(() => {
-    const firstSuccess = results.find((r) => r.success && r.taskUrl);
-    if (firstSuccess?.taskUrl) {
-      window.open(firstSuccess.taskUrl, '_blank');
+    const firstSuccess = results.find((r) => r.success);
+    if (firstSuccess) {
+      // Handle both CreateUserStoryResult (url) and CreateTaskResult (taskUrl)
+      const url = 'url' in firstSuccess ? firstSuccess.url : ('taskUrl' in firstSuccess ? firstSuccess.taskUrl : undefined);
+      if (url) {
+        window.open(url, '_blank');
+      }
     }
   }, [results]);
 
   const handleCreateMore = useCallback(() => {
-    setFrameTasks([]);
+    setFrameWorkItems([]);
     setResults([]);
     setError(null);
+    setHierarchyContext({});
+    setCompletedFrameIds(new Set());
+    setSubmittedIds(new Set());
     setScreen('home');
   }, []);
 
-  // Convert frameTasks to flat array for screens that need it
-  const flatTasksForDisplay = frameTasks.flatMap((ft) =>
-    ft.tasks.map((task) => ({
-      frameId: ft.frameId,
-      frameName: ft.frameName,
-      title: task.title,
-      description: task.description,
-    }))
-  );
+  // Get tasks for submitting screen
+  const getTasksForSubmitting = useCallback(() => {
+    const selectedItems = getSelectedWorkItems();
+    return selectedItems.map((item) => ({
+      taskId: item.id,
+      title: item.title,
+      description: item.description,
+      tags: selectedTags,
+      parentStoryId: hierarchyContext.userStory?.id || 0,
+    }));
+  }, [getSelectedWorkItems, selectedTags, hierarchyContext]);
 
   return (
     <div className="plugin-container" ref={containerRef}>
@@ -280,75 +388,93 @@ export function App(): React.ReactElement {
       {screen === 'home' && (
         <HomeScreen
           frameCount={frameCount}
+          sectionCount={sectionCount}
           onContinue={handleContinueFromHome}
         />
       )}
 
-      {screen === 'context' && (
-        <ContextScreen
-          frames={frames}
-          onGenerate={handleGenerate}
+      {screen === 'work-item-type' && (
+        <WorkItemTypeScreen
+          frameCount={frameCount}
+          sectionCount={sectionCount}
+          savedWorkItemType={storage.lastWorkItemType}
+          onSelect={handleSelectWorkItemType}
           onBack={() => setScreen('home')}
-        />
-      )}
-
-      {screen === 'generating' && (
-        <GeneratingScreen
-          frames={frames}
-          completedFrameIds={completedFrameIds}
         />
       )}
 
       {screen === 'connect-azure' && (
         <ConnectAzureScreen
-          frameTasks={frameTasks}
+          frameCount={frameCount}
           isAuthenticated={auth.isAuthenticated}
-          onTaskToggle={handleTaskToggle}
           onConnect={handleConnectAzure}
-          onContinue={() => setScreen('select-story')}
-          onBack={() => setScreen('context')}
+          onContinue={() => setScreen('select-parent')}
+          onBack={() => setScreen('work-item-type')}
         />
       )}
 
-      {screen === 'select-story' && (
-        <SelectStoryScreen
+      {screen === 'select-parent' && (
+        <SelectParentScreen
           accessToken={auth.accessToken!}
-          taskCount={getTotalTaskCount()}
+          workItemType={workItemType}
+          workItemCount={frameCount}
           savedOrg={storage.azureOrg}
           savedProjectId={storage.azureProjectId}
+          savedEpicId={storage.lastEpicId}
           savedStoryId={storage.lastStoryId}
           savedFrequentTags={storage.frequentTags}
-          onContinue={handleStorySelected}
+          onContinue={handleParentSelected}
           onSessionExpired={handleSessionExpired}
           onRefreshToken={auth.refresh}
           onBack={() => setScreen('connect-azure')}
         />
       )}
 
+      {screen === 'context' && (
+        <ContextScreen
+          frames={frames}
+          workItemType={workItemType}
+          parentTitle={parentTitle}
+          onGenerate={handleGenerate}
+          onBack={() => setScreen('select-parent')}
+        />
+      )}
+
+      {screen === 'generating' && (
+        <GeneratingScreen
+          frames={frames}
+          workItemType={workItemType}
+          completedFrameIds={completedFrameIds}
+        />
+      )}
+
       {screen === 'review' && (
         <ReviewScreen
-          frameTasks={frameTasks}
+          frameWorkItems={frameWorkItems}
+          workItemType={workItemType}
           selectedTags={selectedTags}
-          storyTitle={storyTitle}
-          onTaskUpdate={handleTaskUpdate}
-          onTaskToggle={handleTaskToggle}
+          parentTitle={parentTitle}
+          onWorkItemUpdate={handleWorkItemUpdate}
+          onWorkItemToggle={handleWorkItemToggle}
           onRemoveTag={handleRemoveTag}
           onSubmit={handleSubmit}
-          onBack={() => setScreen('select-story')}
+          onBack={() => setScreen('context')}
         />
       )}
 
       {screen === 'submitting' && (
         <SubmittingScreen
-          tasks={getSelectedTasks()}
-          completedTaskIds={submittedTaskIds}
+          tasks={getTasksForSubmitting()}
+          workItemType={workItemType}
+          completedTaskIds={submittedIds}
         />
       )}
 
       {screen === 'success' && (
         <SuccessScreen
           results={results}
-          storyTitle={storyTitle}
+          workItemType={workItemType}
+          parentTitle={parentTitle}
           tags={selectedTags}
           onViewInAzure={handleViewInAzure}
           onCreateMore={handleCreateMore}
@@ -358,6 +484,7 @@ export function App(): React.ReactElement {
       {screen === 'partial-failure' && (
         <PartialFailureScreen
           results={results}
+          workItemType={workItemType}
           onRetry={handleRetry}
           onViewSuccessful={handleViewInAzure}
         />

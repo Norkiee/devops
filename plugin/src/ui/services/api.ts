@@ -1,10 +1,16 @@
 import {
   FrameData,
   FrameTasks,
+  FrameWorkItems,
   AzureProject,
   AzureStory,
+  AzureWorkItemDetails,
   CreateTaskResult,
+  CreateUserStoryResult,
   TaskToSubmit,
+  UserStoryToSubmit,
+  WorkItemType,
+  HierarchyContext,
 } from '../types';
 
 const API_URL = 'https://devops-psi.vercel.app';
@@ -59,13 +65,34 @@ function authHeaders(accessToken: string): Record<string, string> {
   return { Authorization: `Bearer ${accessToken}` };
 }
 
+export async function generateWorkItems(
+  frames: FrameData[],
+  workItemType: WorkItemType = 'Task',
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): Promise<{ workItemType: WorkItemType; frameWorkItems: FrameWorkItems[] }> {
+  const data = await request<{
+    workItemType: WorkItemType;
+    frameWorkItems: FrameWorkItems[];
+    frameTasks?: FrameTasks[];
+  }>('/api/generate', {
+    method: 'POST',
+    body: JSON.stringify({ frames, context, workItemType, hierarchyContext }),
+  });
+  return {
+    workItemType: data.workItemType,
+    frameWorkItems: data.frameWorkItems,
+  };
+}
+
+// Backwards compatibility
 export async function generateTasks(
   frames: FrameData[],
   context?: string
 ): Promise<FrameTasks[]> {
   const data = await request<{ frameTasks: FrameTasks[] }>('/api/generate', {
     method: 'POST',
-    body: JSON.stringify({ frames, context }),
+    body: JSON.stringify({ frames, context, workItemType: 'Task' }),
   });
   return data.frameTasks;
 }
@@ -135,6 +162,43 @@ export async function fetchStories(
   return data.stories;
 }
 
+export async function fetchEpics(
+  accessToken: string,
+  org: string,
+  projectId: string
+): Promise<AzureStory[]> {
+  const data = await request<{ epics: AzureStory[] }>(
+    `/api/azure/epics?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.epics;
+}
+
+export async function fetchStoriesByEpic(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  epicId: number
+): Promise<AzureStory[]> {
+  const data = await request<{ stories: AzureStory[] }>(
+    `/api/azure/stories?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}&epicId=${epicId}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.stories;
+}
+
+export async function fetchWorkItemDetails(
+  accessToken: string,
+  org: string,
+  workItemId: number
+): Promise<AzureWorkItemDetails> {
+  const data = await request<AzureWorkItemDetails>(
+    `/api/azure/workitem?org=${encodeURIComponent(org)}&id=${workItemId}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data;
+}
+
 export async function fetchTags(
   accessToken: string,
   org: string,
@@ -166,6 +230,33 @@ export async function createTasks(
           description: t.description,
           parentStoryId: t.parentStoryId,
           tags: t.tags,
+        })),
+      }),
+    }
+  );
+  return data.results;
+}
+
+export async function createUserStories(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  stories: UserStoryToSubmit[]
+): Promise<CreateUserStoryResult[]> {
+  const data = await request<{ results: CreateUserStoryResult[] }>(
+    `/api/azure/userstories?org=${encodeURIComponent(org)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        projectId,
+        stories: stories.map((s) => ({
+          workItemId: s.workItemId,
+          title: s.title,
+          description: s.description,
+          acceptanceCriteria: s.acceptanceCriteria,
+          parentEpicId: s.parentEpicId,
+          tags: s.tags,
         })),
       }),
     }

@@ -1,9 +1,12 @@
 import React from 'react';
-import { CreateTaskResult } from '../types';
+import { CreateTaskResult, CreateUserStoryResult, WorkItemType } from '../types';
 import { Button } from '../components/Button';
 
+type SubmitResult = CreateTaskResult | CreateUserStoryResult;
+
 interface PartialFailureScreenProps {
-  results: CreateTaskResult[];
+  results: SubmitResult[];
+  workItemType?: WorkItemType;
   onRetry: () => void;
   onViewSuccessful: () => void;
 }
@@ -49,49 +52,56 @@ const styles: Record<string, React.CSSProperties> = {
 
 export function PartialFailureScreen({
   results,
+  workItemType = 'Task',
   onRetry,
   onViewSuccessful,
 }: PartialFailureScreenProps): React.ReactElement {
   const successCount = results.filter((r) => r.success).length;
   const failCount = results.filter((r) => !r.success).length;
+  const isUserStory = workItemType === 'UserStory';
+  const itemLabel = isUserStory ? 'user story' : 'task';
+  const itemLabelPlural = isUserStory ? 'user stories' : 'tasks';
 
   return (
     <div className="screen screen-center">
       <div style={styles.icon}>!</div>
       <h2 style={styles.heading}>
-        {successCount} of {results.length} tasks created
+        {successCount} of {results.length} {results.length === 1 ? itemLabel : itemLabelPlural} created
       </h2>
       <p style={styles.subtext}>
-        {failCount} task{failCount > 1 ? 's' : ''} failed to create
+        {failCount} {failCount === 1 ? itemLabel : itemLabelPlural} failed to create
       </p>
 
       <div className="progress-list" style={{ marginTop: '12px' }}>
-        {results.map((result, index) => (
-          <div key={result.taskId || index} style={styles.item}>
-            <span style={styles.itemIcon}>
-              {result.success ? (
-                <span className="success-icon">&#10003;</span>
-              ) : (
-                <span className="error-icon">&#10007;</span>
-              )}
-            </span>
-            <span>
-              Task {index + 1}
-              {result.error && (
-                <span style={{ color: '#dc3545' }}> - {result.error}</span>
-              )}
-            </span>
-          </div>
-        ))}
+        {results.map((result, index) => {
+          const id = 'workItemId' in result ? result.workItemId : result.taskId;
+          return (
+            <div key={id || index} style={styles.item}>
+              <span style={styles.itemIcon}>
+                {result.success ? (
+                  <span className="success-icon">&#10003;</span>
+                ) : (
+                  <span className="error-icon">&#10007;</span>
+                )}
+              </span>
+              <span>
+                Item {index + 1}
+                {result.error && (
+                  <span style={{ color: '#dc3545' }}> - {result.error}</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       <div className="screen-footer" style={styles.buttons}>
         <Button onClick={onRetry} fullWidth>
-          Retry Failed Tasks
+          Retry Failed {isUserStory ? 'Stories' : 'Tasks'}
         </Button>
         {successCount > 0 && (
           <Button onClick={onViewSuccessful} variant="secondary" fullWidth>
-            View Successful Tasks
+            View Successful {isUserStory ? 'Stories' : 'Tasks'}
           </Button>
         )}
       </div>
