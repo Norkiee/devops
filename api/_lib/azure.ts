@@ -202,7 +202,6 @@ export async function createTask(
       path: '/fields/System.Description',
       value: task.description,
     },
-    { op: 'add', path: '/fields/System.State', value: 'New' },
     {
       op: 'add',
       path: '/fields/System.Tags',
@@ -396,7 +395,6 @@ export async function createUserStory(
       path: '/fields/System.Description',
       value: story.description,
     },
-    { op: 'add', path: '/fields/System.State', value: 'New' },
     {
       op: 'add',
       path: '/fields/System.Tags',
@@ -592,7 +590,6 @@ export async function createEpic(
   const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: epic.title },
     { op: 'add', path: '/fields/System.Description', value: epic.description },
-    { op: 'add', path: '/fields/System.State', value: 'New' },
     { op: 'add', path: '/fields/System.Tags', value: epic.tags.join('; ') },
   ];
 
@@ -631,7 +628,6 @@ export async function createFeature(
   const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: feature.title },
     { op: 'add', path: '/fields/System.Description', value: feature.description },
-    { op: 'add', path: '/fields/System.State', value: 'New' },
     { op: 'add', path: '/fields/System.Tags', value: feature.tags.join('; ') },
   ];
 
