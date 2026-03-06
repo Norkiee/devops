@@ -120,7 +120,10 @@ export function useAzureAuth(): UseAzureAuthResult {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      // No session to refresh - throw so caller knows to redirect to connect
+      throw new Error('No session to refresh');
+    }
     try {
       const newToken = await refreshToken(sessionId);
       setAccessToken(newToken);
@@ -129,6 +132,7 @@ export function useAzureAuth(): UseAzureAuthResult {
       setAccessToken(null);
       setSessionId(null);
       setStorage({ accessToken: undefined, sessionId: undefined });
+      throw new Error('Token refresh failed');
     }
   }, [sessionId]);
 
