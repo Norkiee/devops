@@ -10,8 +10,12 @@ export function isAzureAuthError(error: unknown): boolean {
   return (
     msg.includes('authentication failed') ||
     msg.includes('unauthorized') ||
+    msg.includes('not authorized') ||
     msg.includes('token expired') ||
-    msg.includes('invalid token')
+    msg.includes('invalid token') ||
+    msg.includes('access denied') ||
+    msg.includes('401') ||
+    msg.includes('403')
   );
 }
 

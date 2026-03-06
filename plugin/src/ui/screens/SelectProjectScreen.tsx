@@ -42,6 +42,7 @@ export function SelectProjectScreen({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Helper to handle auth errors with refresh attempt
+  // Returns true if refresh succeeded and caller should retry
   const handleAuthError = async (): Promise<boolean> => {
     if (isRefreshing) return false;
     setIsRefreshing(true);
@@ -54,6 +55,20 @@ export function SelectProjectScreen({
       onSessionExpired();
       return false;
     }
+  };
+
+  // Check if an error message indicates auth failure
+  const isLikelyAuthError = (err: unknown): boolean => {
+    if (err instanceof Error && err.name === 'AuthError') return true;
+    const msg = err instanceof Error ? err.message.toLowerCase() : '';
+    return (
+      msg.includes('session expired') ||
+      msg.includes('unauthorized') ||
+      msg.includes('authentication') ||
+      msg.includes('token') ||
+      msg.includes('401') ||
+      msg.includes('403')
+    );
   };
 
   // Auto-fetch organizations on mount
@@ -74,10 +89,15 @@ export function SelectProjectScreen({
         }
       } catch (err) {
         if (isCancelled) return;
-        if (err instanceof Error && err.name === 'AuthError') {
+        // Try to refresh token on any error - expired tokens may not always return proper auth errors
+        if (isLikelyAuthError(err)) {
           await handleAuthError();
         } else {
-          setError(err instanceof Error ? err.message : 'Unknown error');
+          // For other errors, still try refresh once as fallback
+          const refreshed = await handleAuthError();
+          if (!refreshed) {
+            // If refresh failed, session is expired - onSessionExpired already called
+          }
         }
       } finally {
         if (!isCancelled) setLoading(false);
@@ -110,10 +130,15 @@ export function SelectProjectScreen({
         }
       } catch (err) {
         if (isCancelled) return;
-        if (err instanceof Error && err.name === 'AuthError') {
+        // Try to refresh token on any error - expired tokens may not always return proper auth errors
+        if (isLikelyAuthError(err)) {
           await handleAuthError();
         } else {
-          setError(err instanceof Error ? err.message : 'Unknown error');
+          // For other errors, still try refresh once as fallback
+          const refreshed = await handleAuthError();
+          if (!refreshed) {
+            // If refresh failed, session is expired - onSessionExpired already called
+          }
         }
       } finally {
         if (!isCancelled) setLoading(false);
@@ -139,10 +164,15 @@ export function SelectProjectScreen({
         setAvailableTypes(fetchedTypes);
       } catch (err) {
         if (isCancelled) return;
-        if (err instanceof Error && err.name === 'AuthError') {
+        // Try to refresh token on any error - expired tokens may not always return proper auth errors
+        if (isLikelyAuthError(err)) {
           await handleAuthError();
         } else {
-          setError(err instanceof Error ? err.message : 'Unknown error');
+          // For other errors, still try refresh once as fallback
+          const refreshed = await handleAuthError();
+          if (!refreshed) {
+            // If refresh failed, session is expired - onSessionExpired already called
+          }
         }
       } finally {
         if (!isCancelled) setLoading(false);
