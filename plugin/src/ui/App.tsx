@@ -66,17 +66,13 @@ export function App(): React.ReactElement {
   const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<SubmitResult[]>([]);
 
-  // Flow: home → work-item-type → connect-azure → select-parent → context → generating → review → submitting → success
+  // Flow: home → work-item-type → connect-azure → select-project → select-parent → context → generating → review → submitting → success
 
   const handleContinueFromHome = useCallback(() => {
     requestFrames();
-    // Connect to Azure first so we can detect available work item types
-    if (auth.isAuthenticated) {
-      setScreen('select-project');
-    } else {
-      setScreen('connect-azure');
-    }
-  }, [requestFrames, auth.isAuthenticated]);
+    // Go to work item type selection first
+    setScreen('work-item-type');
+  }, [requestFrames]);
 
   const handleConnectAzure = useCallback(() => {
     auth.startAuth(() => {
@@ -84,7 +80,7 @@ export function App(): React.ReactElement {
     });
   }, [auth]);
 
-  // Called after selecting org/project to go to work item type selection
+  // Called after selecting org/project to go to parent selection (or context for Epics)
   const handleProjectSelected = useCallback(
     (selection: {
       org: string;
@@ -101,24 +97,29 @@ export function App(): React.ReactElement {
         azureProjectId: selection.projectId,
       });
 
-      setScreen('work-item-type');
+      // For Epics, no parent needed - go straight to context
+      if (workItemType === 'Epic') {
+        setHierarchyContext({});
+        setParentTitle('');
+        setScreen('context');
+      } else {
+        setScreen('select-parent');
+      }
     },
-    [updateStorage]
+    [updateStorage, workItemType]
   );
 
   const handleSelectWorkItemType = useCallback((type: WorkItemType) => {
     setWorkItemType(type);
     updateStorage({ lastWorkItemType: type });
 
-    // For Epics, no parent needed - go straight to context
-    if (type === 'Epic') {
-      setHierarchyContext({});
-      setParentTitle('');
-      setScreen('context');
+    // Need to connect to Azure first if not authenticated
+    if (!auth.isAuthenticated) {
+      setScreen('connect-azure');
     } else {
-      setScreen('select-parent');
+      setScreen('select-project');
     }
-  }, [updateStorage]);
+  }, [updateStorage, auth.isAuthenticated]);
 
   const handleSessionExpired = useCallback(() => {
     auth.logout();
@@ -519,7 +520,7 @@ export function App(): React.ReactElement {
           savedWorkItemType={storage.lastWorkItemType}
           availableTypes={availableTypes}
           onSelect={handleSelectWorkItemType}
-          onBack={() => setScreen('select-project')}
+          onBack={() => setScreen('home')}
         />
       )}
 
@@ -529,7 +530,7 @@ export function App(): React.ReactElement {
           isAuthenticated={auth.isAuthenticated}
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-project')}
-          onBack={() => setScreen('home')}
+          onBack={() => setScreen('work-item-type')}
         />
       )}
 
@@ -541,7 +542,7 @@ export function App(): React.ReactElement {
           onContinue={handleProjectSelected}
           onSessionExpired={handleSessionExpired}
           onRefreshToken={auth.refresh}
-          onBack={() => setScreen('home')}
+          onBack={() => setScreen('work-item-type')}
         />
       )}
 
@@ -569,7 +570,7 @@ export function App(): React.ReactElement {
           workItemType={workItemType}
           parentTitle={parentTitle}
           onGenerate={handleGenerate}
-          onBack={() => setScreen(workItemType === 'Epic' ? 'work-item-type' : 'select-parent')}
+          onBack={() => setScreen(workItemType === 'Epic' ? 'select-project' : 'select-parent')}
         />
       )}
 
