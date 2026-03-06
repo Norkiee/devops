@@ -169,14 +169,12 @@ export function WorkItemTypeScreen({
     : `${frameCount} frame${frameCount > 1 ? 's' : ''}`;
 
   // Filter type configs based on available types from Azure DevOps
+  // Show all types by default when project not yet selected (availableTypes empty)
   const visibleTypes = availableTypes && availableTypes.length > 0
     ? typeConfigs.filter((config) =>
         availableTypes.some((at) => at.name === config.azureName)
       )
-    : typeConfigs.filter((config) =>
-        // Default to showing User Story and Task if no types loaded yet
-        config.type === 'UserStory' || config.type === 'Task'
-      );
+    : typeConfigs;
 
   return (
     <div className="screen">
