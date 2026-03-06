@@ -127,11 +127,12 @@ export default async function handler(
     // Validate workItemType - default to 'Task' for backwards compatibility
     let workItemType: WorkItemType = 'Task';
     if (body.workItemType !== undefined) {
-      if (body.workItemType !== 'UserStory' && body.workItemType !== 'Task') {
-        res.status(400).json({ error: 'workItemType must be "UserStory" or "Task"' });
+      const validTypes: WorkItemType[] = ['Epic', 'Feature', 'UserStory', 'Task'];
+      if (!validTypes.includes(body.workItemType as WorkItemType)) {
+        res.status(400).json({ error: 'workItemType must be "Epic", "Feature", "UserStory", or "Task"' });
         return;
       }
-      workItemType = body.workItemType;
+      workItemType = body.workItemType as WorkItemType;
     }
 
     // Validate hierarchyContext if provided

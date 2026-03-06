@@ -1,5 +1,13 @@
 // Work item types that can be generated
-export type WorkItemType = 'UserStory' | 'Task';
+export type WorkItemType = 'Epic' | 'Feature' | 'UserStory' | 'Task';
+
+// Work item type info from Azure DevOps
+export interface WorkItemTypeInfo {
+  name: string;
+  referenceName: string;
+  description?: string;
+  icon?: string;
+}
 
 // Hierarchy context for AI generation
 export interface HierarchyContext {
@@ -7,6 +15,12 @@ export interface HierarchyContext {
     id: number;
     title: string;
     description?: string;
+  };
+  feature?: {
+    id: number;
+    title: string;
+    description?: string;
+    acceptanceCriteria?: string;
   };
   userStory?: {
     id: number;
@@ -96,7 +110,40 @@ export interface UserStoryToSubmit {
   parentEpicId: number;
 }
 
+export interface EpicToSubmit {
+  workItemId: string;
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  tags: string[];
+}
+
+export interface FeatureToSubmit {
+  workItemId: string;
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  parentEpicId?: number;
+  tags: string[];
+}
+
 export interface CreateUserStoryResult {
+  workItemId: string;
+  success: boolean;
+  azureId?: number;
+  url?: string;
+  error?: string;
+}
+
+export interface CreateEpicResult {
+  workItemId: string;
+  success: boolean;
+  azureId?: number;
+  url?: string;
+  error?: string;
+}
+
+export interface CreateFeatureResult {
   workItemId: string;
   success: boolean;
   azureId?: number;
@@ -119,6 +166,7 @@ export interface PluginStorage {
   azureOrg?: string;
   lastStoryId?: number;
   lastEpicId?: number;
+  lastFeatureId?: number;
   lastWorkItemType?: WorkItemType;
   frequentTags?: string[];
   sessionId?: string;
@@ -129,12 +177,12 @@ export interface PluginStorage {
 
 export type Screen =
   | 'home'
+  | 'connect-azure'
+  | 'select-project'
   | 'work-item-type'
+  | 'select-parent'
   | 'context'
   | 'generating'
-  | 'connect-azure'
-  | 'select-parent'
-  | 'select-story' // Kept for backwards compatibility, replaced by select-parent
   | 'review'
   | 'submitting'
   | 'success'

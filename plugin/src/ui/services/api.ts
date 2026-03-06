@@ -7,9 +7,14 @@ import {
   AzureWorkItemDetails,
   CreateTaskResult,
   CreateUserStoryResult,
+  CreateEpicResult,
+  CreateFeatureResult,
   TaskToSubmit,
   UserStoryToSubmit,
+  EpicToSubmit,
+  FeatureToSubmit,
   WorkItemType,
+  WorkItemTypeInfo,
   HierarchyContext,
 } from '../types';
 
@@ -257,6 +262,96 @@ export async function createUserStories(
           acceptanceCriteria: s.acceptanceCriteria,
           parentEpicId: s.parentEpicId,
           tags: s.tags,
+        })),
+      }),
+    }
+  );
+  return data.results;
+}
+
+export async function fetchWorkItemTypes(
+  accessToken: string,
+  org: string,
+  projectId: string
+): Promise<WorkItemTypeInfo[]> {
+  const data = await request<{ workItemTypes: WorkItemTypeInfo[] }>(
+    `/api/azure/workitemtypes?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.workItemTypes;
+}
+
+export async function fetchFeatures(
+  accessToken: string,
+  org: string,
+  projectId: string
+): Promise<AzureStory[]> {
+  const data = await request<{ features: AzureStory[] }>(
+    `/api/azure/features?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.features;
+}
+
+export async function fetchFeaturesByEpic(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  epicId: number
+): Promise<AzureStory[]> {
+  const data = await request<{ features: AzureStory[] }>(
+    `/api/azure/features?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}&epicId=${epicId}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.features;
+}
+
+export async function createEpics(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  epics: EpicToSubmit[]
+): Promise<CreateEpicResult[]> {
+  const data = await request<{ results: CreateEpicResult[] }>(
+    `/api/azure/epics/create?org=${encodeURIComponent(org)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        projectId,
+        epics: epics.map((e) => ({
+          workItemId: e.workItemId,
+          title: e.title,
+          description: e.description,
+          acceptanceCriteria: e.acceptanceCriteria,
+          tags: e.tags,
+        })),
+      }),
+    }
+  );
+  return data.results;
+}
+
+export async function createFeatures(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  features: FeatureToSubmit[]
+): Promise<CreateFeatureResult[]> {
+  const data = await request<{ results: CreateFeatureResult[] }>(
+    `/api/azure/features/create?org=${encodeURIComponent(org)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        projectId,
+        features: features.map((f) => ({
+          workItemId: f.workItemId,
+          title: f.title,
+          description: f.description,
+          acceptanceCriteria: f.acceptanceCriteria,
+          parentEpicId: f.parentEpicId,
+          tags: f.tags,
         })),
       }),
     }

@@ -1,11 +1,12 @@
 import React from 'react';
-import { WorkItemType } from '../types';
+import { WorkItemType, WorkItemTypeInfo } from '../types';
 import { Button } from '../components/Button';
 
 interface WorkItemTypeScreenProps {
   frameCount: number;
   sectionCount: number;
   savedWorkItemType?: WorkItemType;
+  availableTypes?: WorkItemTypeInfo[];
   onSelect: (type: WorkItemType) => void;
   onBack: () => void;
 }
@@ -38,6 +39,14 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     fontSize: '16px',
   },
+  epicIcon: {
+    background: '#fef3c7',
+    color: '#d97706',
+  },
+  featureIcon: {
+    background: '#e0e7ff',
+    color: '#4f46e5',
+  },
   storyIcon: {
     background: '#dbeafe',
     color: '#2563eb',
@@ -62,6 +71,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '12px',
     flex: 1,
+    overflowY: 'auto',
   },
   badge: {
     background: '#f3e8ff',
@@ -75,10 +85,78 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
+// Work item type configuration
+interface TypeConfig {
+  type: WorkItemType;
+  azureName: string;
+  title: string;
+  description: string;
+  iconStyle: React.CSSProperties;
+  icon: React.ReactNode;
+}
+
+const typeConfigs: TypeConfig[] = [
+  {
+    type: 'Epic',
+    azureName: 'Epic',
+    title: 'Epics',
+    description: 'Create high-level epics representing major product initiatives',
+    iconStyle: styles.epicIcon,
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        <path d="M8 6V10M6 8H10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'Feature',
+    azureName: 'Feature',
+    title: 'Features',
+    description: 'Create features with acceptance criteria under an Epic',
+    iconStyle: styles.featureIcon,
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'UserStory',
+    azureName: 'User Story',
+    title: 'User Stories',
+    description: 'Create user stories with acceptance criteria under an Epic or Feature',
+    iconStyle: styles.storyIcon,
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'Task',
+    azureName: 'Task',
+    title: 'Tasks',
+    description: 'Create development tasks under a User Story',
+    iconStyle: styles.taskIcon,
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+];
+
 export function WorkItemTypeScreen({
   frameCount,
   sectionCount,
   savedWorkItemType,
+  availableTypes,
   onSelect,
   onBack,
 }: WorkItemTypeScreenProps): React.ReactElement {
@@ -90,6 +168,16 @@ export function WorkItemTypeScreen({
     ? `${sectionCount} section${sectionCount > 1 ? 's' : ''} (${frameCount} frame${frameCount > 1 ? 's' : ''})`
     : `${frameCount} frame${frameCount > 1 ? 's' : ''}`;
 
+  // Filter type configs based on available types from Azure DevOps
+  const visibleTypes = availableTypes && availableTypes.length > 0
+    ? typeConfigs.filter((config) =>
+        availableTypes.some((at) => at.name === config.azureName)
+      )
+    : typeConfigs.filter((config) =>
+        // Default to showing User Story and Task if no types loaded yet
+        config.type === 'UserStory' || config.type === 'Task'
+      );
+
   return (
     <div className="screen">
       <div className="screen-header">
@@ -100,51 +188,26 @@ export function WorkItemTypeScreen({
       <div style={styles.badge}>{frameLabel} ready</div>
 
       <div style={styles.cardsContainer as React.CSSProperties}>
-        <div
-          style={{
-            ...styles.optionCard,
-            ...(hoveredType === 'UserStory' ? styles.optionCardHover : {}),
-          }}
-          onClick={() => onSelect('UserStory')}
-          onMouseEnter={() => setHoveredType('UserStory')}
-          onMouseLeave={() => setHoveredType(null)}
-        >
-          <div style={styles.optionHeader}>
-            <div style={{ ...styles.optionIcon, ...styles.storyIcon }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
+        {visibleTypes.map((config) => (
+          <div
+            key={config.type}
+            style={{
+              ...styles.optionCard,
+              ...(hoveredType === config.type ? styles.optionCardHover : {}),
+            }}
+            onClick={() => onSelect(config.type)}
+            onMouseEnter={() => setHoveredType(config.type)}
+            onMouseLeave={() => setHoveredType(null)}
+          >
+            <div style={styles.optionHeader}>
+              <div style={{ ...styles.optionIcon, ...config.iconStyle }}>
+                {config.icon}
+              </div>
+              <span style={styles.optionTitle}>{config.title}</span>
             </div>
-            <span style={styles.optionTitle}>User Stories</span>
+            <p style={styles.optionDescription}>{config.description}</p>
           </div>
-          <p style={styles.optionDescription}>
-            Create user stories with acceptance criteria under an Epic
-          </p>
-        </div>
-
-        <div
-          style={{
-            ...styles.optionCard,
-            ...(hoveredType === 'Task' ? styles.optionCardHover : {}),
-          }}
-          onClick={() => onSelect('Task')}
-          onMouseEnter={() => setHoveredType('Task')}
-          onMouseLeave={() => setHoveredType(null)}
-        >
-          <div style={styles.optionHeader}>
-            <div style={{ ...styles.optionIcon, ...styles.taskIcon }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span style={styles.optionTitle}>Tasks</span>
-          </div>
-          <p style={styles.optionDescription}>
-            Create development tasks under a User Story
-          </p>
-        </div>
+        ))}
       </div>
 
       <div className="screen-footer">

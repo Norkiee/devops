@@ -66,6 +66,65 @@ async function fetchWithRetry(
   throw lastError || new Error('Unknown error during fetch');
 }
 
+const EPIC_SYSTEM_PROMPT = `You are a product strategist helping create Epics for UI/UX design work. Given information about design frames from Figma, generate high-level Epics that represent major product initiatives or features.
+
+Context:
+- Epics are large bodies of work that can be broken down into smaller pieces
+- They represent significant product capabilities or user journeys
+- They should be business-value focused, not implementation-focused
+
+Generate 1-2 Epics per frame depending on scope:
+- Single-purpose frames: 1 epic
+- Complex frames with multiple user journeys: 2 epics
+
+Guidelines:
+- Title format: Short, value-driven phrase (e.g., "User Authentication", "Dashboard Analytics")
+- Description should explain the business value and scope
+- Include acceptance criteria as high-level success metrics
+- Focus on WHAT value is delivered, not HOW it's implemented
+- Keep scope large enough to contain multiple features/stories
+
+Output JSON format:
+{
+  "epics": [
+    {
+      "title": "string",
+      "description": "string",
+      "acceptanceCriteria": "string (bullet points separated by newlines)"
+    }
+  ]
+}`;
+
+const FEATURE_SYSTEM_PROMPT = `You are a product requirements generator for UI/UX design work. Given information about a design frame from Figma and optionally the parent Epic context, generate Features that represent distinct product capabilities.
+
+Context:
+- Features are mid-level work items between Epics and User Stories
+- They represent a specific capability that delivers user value
+- They should be deliverable within a few sprints
+
+Generate 1-3 Features per frame depending on complexity:
+- Simple frames: 1 feature
+- Medium frames: 2 features
+- Complex frames with distinct capabilities: 3 features
+
+Guidelines:
+- Title format: Capability-focused phrase (e.g., "Login with Social Accounts", "Real-time Notifications")
+- Description should explain what capability is being delivered and why
+- Include acceptance criteria as testable conditions
+- Focus on user-facing functionality
+- Each feature should be independently valuable
+
+Output JSON format:
+{
+  "features": [
+    {
+      "title": "string",
+      "description": "string",
+      "acceptanceCriteria": "string (bullet points separated by newlines)"
+    }
+  ]
+}`;
+
 const TASK_SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma and the parent Epic and User Story context, generate clear, actionable development tasks.
 
 Context:
@@ -127,6 +186,46 @@ Output JSON format:
 // Backwards compatibility alias
 const SYSTEM_PROMPT = TASK_SYSTEM_PROMPT;
 
+function buildEpicPrompt(
+  frame: FrameData,
+  context?: string
+): string {
+  return `Frame name: ${frame.name}
+${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
+Text content found: ${frame.textContent.join(', ') || 'None'}
+Components used: ${frame.componentNames.join(', ') || 'None'}
+Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
+Dimensions: ${frame.width}x${frame.height}
+
+${context ? `Additional context: ${context}` : ''}
+
+Generate Epics for this design frame that represent major product initiatives.`;
+}
+
+function buildFeaturePrompt(
+  frame: FrameData,
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): string {
+  const epicSection = hierarchyContext?.epic
+    ? `Epic: ${hierarchyContext.epic.title}
+Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
+
+`
+    : '';
+
+  return `${epicSection}Frame name: ${frame.name}
+${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
+Text content found: ${frame.textContent.join(', ') || 'None'}
+Components used: ${frame.componentNames.join(', ') || 'None'}
+Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
+Dimensions: ${frame.width}x${frame.height}
+
+${context ? `Additional context: ${context}` : ''}
+
+Generate Features for this design frame that represent distinct product capabilities.`;
+}
+
 function buildTaskPrompt(
   frame: FrameData,
   context?: string,
@@ -139,6 +238,13 @@ Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
 `
     : '';
 
+  const featureSection = hierarchyContext?.feature
+    ? `Feature: ${hierarchyContext.feature.title}
+Feature Description: ${hierarchyContext.feature.description || 'Not provided'}
+
+`
+    : '';
+
   const storySection = hierarchyContext?.userStory
     ? `User Story: ${hierarchyContext.userStory.title}
 Story Description: ${hierarchyContext.userStory.description || 'Not provided'}
@@ -147,7 +253,7 @@ Acceptance Criteria: ${hierarchyContext.userStory.acceptanceCriteria || 'Not pro
 `
     : '';
 
-  return `${epicSection}${storySection}Frame name: ${frame.name}
+  return `${epicSection}${featureSection}${storySection}Frame name: ${frame.name}
 ${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
 Text content found: ${frame.textContent.join(', ') || 'None'}
 Components used: ${frame.componentNames.join(', ') || 'None'}
@@ -243,6 +349,18 @@ interface ParsedUserStory {
   acceptanceCriteria?: string;
 }
 
+interface ParsedEpic {
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+}
+
+interface ParsedFeature {
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+}
+
 function parseTaskResponse(text: string): ParsedTask[] {
   const jsonStr = extractJson(text);
   let parsed: unknown;
@@ -315,6 +433,82 @@ function parseUserStoryResponse(text: string): ParsedUserStory[] {
   });
 }
 
+function parseEpicResponse(text: string): ParsedEpic[] {
+  const jsonStr = extractJson(text);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (err) {
+    throw new Error(`Invalid JSON in Claude response: ${err instanceof Error ? err.message : 'parse error'}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Claude response is not a JSON object');
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (!obj.epics || !Array.isArray(obj.epics)) {
+    throw new Error('Missing epics array in Claude response');
+  }
+
+  return obj.epics.map((epic: unknown, index: number) => {
+    if (!epic || typeof epic !== 'object') {
+      throw new Error(`Epic ${index}: Invalid epic object`);
+    }
+    const e = epic as Record<string, unknown>;
+    if (typeof e.title !== 'string' || !e.title) {
+      throw new Error(`Epic ${index}: Missing or invalid title`);
+    }
+    if (typeof e.description !== 'string' || !e.description) {
+      throw new Error(`Epic ${index}: Missing or invalid description`);
+    }
+    return {
+      title: e.title,
+      description: e.description,
+      acceptanceCriteria: typeof e.acceptanceCriteria === 'string' ? e.acceptanceCriteria : undefined,
+    };
+  });
+}
+
+function parseFeatureResponse(text: string): ParsedFeature[] {
+  const jsonStr = extractJson(text);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (err) {
+    throw new Error(`Invalid JSON in Claude response: ${err instanceof Error ? err.message : 'parse error'}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Claude response is not a JSON object');
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (!obj.features || !Array.isArray(obj.features)) {
+    throw new Error('Missing features array in Claude response');
+  }
+
+  return obj.features.map((feature: unknown, index: number) => {
+    if (!feature || typeof feature !== 'object') {
+      throw new Error(`Feature ${index}: Invalid feature object`);
+    }
+    const f = feature as Record<string, unknown>;
+    if (typeof f.title !== 'string' || !f.title) {
+      throw new Error(`Feature ${index}: Missing or invalid title`);
+    }
+    if (typeof f.description !== 'string' || !f.description) {
+      throw new Error(`Feature ${index}: Missing or invalid description`);
+    }
+    return {
+      title: f.title,
+      description: f.description,
+      acceptanceCriteria: typeof f.acceptanceCriteria === 'string' ? f.acceptanceCriteria : undefined,
+    };
+  });
+}
+
 // Backwards compatibility alias
 function parseResponse(text: string): ParsedTask[] {
   return parseTaskResponse(text);
@@ -331,11 +525,29 @@ export async function generateWorkItemsForFrame(
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
 
-  const isUserStory = workItemType === 'UserStory';
-  const systemPrompt = isUserStory ? USER_STORY_SYSTEM_PROMPT : TASK_SYSTEM_PROMPT;
-  const userPrompt = isUserStory
-    ? buildUserStoryPrompt(frame, context, hierarchyContext)
-    : buildTaskPrompt(frame, context, hierarchyContext);
+  // Select system prompt and user prompt based on work item type
+  let systemPrompt: string;
+  let userPrompt: string;
+
+  switch (workItemType) {
+    case 'Epic':
+      systemPrompt = EPIC_SYSTEM_PROMPT;
+      userPrompt = buildEpicPrompt(frame, context);
+      break;
+    case 'Feature':
+      systemPrompt = FEATURE_SYSTEM_PROMPT;
+      userPrompt = buildFeaturePrompt(frame, context, hierarchyContext);
+      break;
+    case 'UserStory':
+      systemPrompt = USER_STORY_SYSTEM_PROMPT;
+      userPrompt = buildUserStoryPrompt(frame, context, hierarchyContext);
+      break;
+    case 'Task':
+    default:
+      systemPrompt = TASK_SYSTEM_PROMPT;
+      userPrompt = buildTaskPrompt(frame, context, hierarchyContext);
+      break;
+  }
 
   // Use fetch with retry logic for transient errors (429, 503, 529)
   const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
@@ -371,23 +583,51 @@ export async function generateWorkItemsForFrame(
 
   let workItems: WorkItem[];
 
-  if (isUserStory) {
-    const parsedStories = parseUserStoryResponse(responseText);
-    workItems = parsedStories.map((story, index) => ({
-      id: `${frame.id}-${index + 1}`,
-      title: story.title,
-      description: story.description,
-      acceptanceCriteria: story.acceptanceCriteria,
-      selected: true,
-    }));
-  } else {
-    const parsedTasks = parseTaskResponse(responseText);
-    workItems = parsedTasks.map((task, index) => ({
-      id: `${frame.id}-${index + 1}`,
-      title: task.title,
-      description: task.description,
-      selected: true,
-    }));
+  switch (workItemType) {
+    case 'Epic': {
+      const parsedEpics = parseEpicResponse(responseText);
+      workItems = parsedEpics.map((epic, index) => ({
+        id: `${frame.id}-${index + 1}`,
+        title: epic.title,
+        description: epic.description,
+        acceptanceCriteria: epic.acceptanceCriteria,
+        selected: true,
+      }));
+      break;
+    }
+    case 'Feature': {
+      const parsedFeatures = parseFeatureResponse(responseText);
+      workItems = parsedFeatures.map((feature, index) => ({
+        id: `${frame.id}-${index + 1}`,
+        title: feature.title,
+        description: feature.description,
+        acceptanceCriteria: feature.acceptanceCriteria,
+        selected: true,
+      }));
+      break;
+    }
+    case 'UserStory': {
+      const parsedStories = parseUserStoryResponse(responseText);
+      workItems = parsedStories.map((story, index) => ({
+        id: `${frame.id}-${index + 1}`,
+        title: story.title,
+        description: story.description,
+        acceptanceCriteria: story.acceptanceCriteria,
+        selected: true,
+      }));
+      break;
+    }
+    case 'Task':
+    default: {
+      const parsedTasks = parseTaskResponse(responseText);
+      workItems = parsedTasks.map((task, index) => ({
+        id: `${frame.id}-${index + 1}`,
+        title: task.title,
+        description: task.description,
+        selected: true,
+      }));
+      break;
+    }
   }
 
   return {

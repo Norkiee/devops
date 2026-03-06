@@ -1,30 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { WorkItemType, AzureProject, AzureStory, HierarchyContext, AzureWorkItemDetails } from '../types';
+import { WorkItemType, AzureStory, HierarchyContext, AzureWorkItemDetails, WorkItemTypeInfo } from '../types';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
 import { Tag } from '../components/Tag';
 import {
-  fetchOrgs,
-  fetchProjects,
   fetchEpics,
   fetchStoriesByEpic,
+  fetchFeaturesByEpic,
   fetchWorkItemDetails,
   fetchTags,
-  AuthError,
 } from '../services/api';
 
 interface SelectParentScreenProps {
   accessToken: string;
   workItemType: WorkItemType;
-  workItemCount: number;
-  savedOrg?: string;
-  savedProjectId?: string;
+  org: string;
+  projectId: string;
   savedEpicId?: number;
+  savedFeatureId?: number;
   savedStoryId?: number;
   savedFrequentTags?: string[];
+  availableTypes?: WorkItemTypeInfo[];
   onContinue: (selection: {
-    org: string;
-    projectId: string;
     hierarchyContext: HierarchyContext;
     selectedTags: string[];
     parentTitle: string;
@@ -55,26 +52,26 @@ const styles: Record<string, React.CSSProperties> = {
 export function SelectParentScreen({
   accessToken,
   workItemType,
-  workItemCount,
-  savedOrg,
-  savedProjectId,
+  org,
+  projectId,
   savedEpicId,
+  savedFeatureId,
   savedStoryId,
   savedFrequentTags,
+  availableTypes = [],
   onContinue,
   onSessionExpired,
   onRefreshToken,
   onBack,
 }: SelectParentScreenProps): React.ReactElement {
-  const [orgs, setOrgs] = useState<string[]>([]);
-  const [org, setOrg] = useState(savedOrg || '');
-  const [projects, setProjects] = useState<AzureProject[]>([]);
-  const [projectId, setProjectId] = useState(savedProjectId || '');
   const [epics, setEpics] = useState<AzureStory[]>([]);
   const [epicId, setEpicId] = useState(savedEpicId?.toString() || '');
+  const [features, setFeatures] = useState<AzureStory[]>([]);
+  const [featureId, setFeatureId] = useState(savedFeatureId?.toString() || '');
   const [stories, setStories] = useState<AzureStory[]>([]);
   const [storyId, setStoryId] = useState(savedStoryId?.toString() || '');
   const [epicDetails, setEpicDetails] = useState<AzureWorkItemDetails | null>(null);
+  const [featureDetails, setFeatureDetails] = useState<AzureWorkItemDetails | null>(null);
   const [storyDetails, setStoryDetails] = useState<AzureWorkItemDetails | null>(null);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>(savedFrequentTags || []);
@@ -82,9 +79,10 @@ export function SelectParentScreen({
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const isTaskMode = workItemType === 'Task';
-  const itemLabel = isTaskMode ? 'task' : 'user story';
-  const itemLabelPlural = isTaskMode ? 'tasks' : 'user stories';
+  // Determine what work item types are available
+  const hasEpics = availableTypes.some((t) => t.name === 'Epic');
+  const hasFeatures = availableTypes.some((t) => t.name === 'Feature');
+  const hasUserStories = availableTypes.some((t) => t.name === 'User Story');
 
   // Helper to handle auth errors with refresh attempt
   const handleAuthError = async (): Promise<boolean> => {
@@ -101,86 +99,11 @@ export function SelectParentScreen({
     }
   };
 
-  // Auto-fetch organizations on mount
+  // Fetch epics and tags on mount
   useEffect(() => {
     let isCancelled = false;
 
-    const loadOrgs = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const fetchedOrgs = await fetchOrgs(accessToken);
-        if (isCancelled) return;
-        setOrgs(fetchedOrgs);
-        if (savedOrg && fetchedOrgs.includes(savedOrg)) {
-          setOrg(savedOrg);
-        } else if (fetchedOrgs.length === 1) {
-          setOrg(fetchedOrgs[0]);
-        }
-      } catch (err) {
-        if (isCancelled) return;
-        if (err instanceof Error && err.name === 'AuthError') {
-          await handleAuthError();
-        } else {
-          setError(err instanceof Error ? err.message : 'Unknown error');
-        }
-      } finally {
-        if (!isCancelled) setLoading(false);
-      }
-    };
-
-    loadOrgs();
-    return () => { isCancelled = true; };
-  }, [accessToken, savedOrg]);
-
-  // Fetch projects when org changes
-  useEffect(() => {
-    if (!org) return;
-    let isCancelled = false;
-
-    const loadProjects = async () => {
-      setProjects([]);
-      setProjectId('');
-      setEpics([]);
-      setEpicId('');
-      setStories([]);
-      setStoryId('');
-      setEpicDetails(null);
-      setStoryDetails(null);
-      setLoading(true);
-      setError('');
-      try {
-        const fetchedProjects = await fetchProjects(accessToken, org);
-        if (isCancelled) return;
-        setProjects(fetchedProjects);
-      } catch (err) {
-        if (isCancelled) return;
-        if (err instanceof Error && err.name === 'AuthError') {
-          await handleAuthError();
-        } else {
-          setError(err instanceof Error ? err.message : 'Unknown error');
-        }
-      } finally {
-        if (!isCancelled) setLoading(false);
-      }
-    };
-
-    loadProjects();
-    return () => { isCancelled = true; };
-  }, [accessToken, org]);
-
-  // Fetch epics and tags when project changes
-  useEffect(() => {
-    if (!org || !projectId) return;
-    let isCancelled = false;
-
-    const loadEpicsAndTags = async () => {
-      setEpics([]);
-      setEpicId('');
-      setStories([]);
-      setStoryId('');
-      setEpicDetails(null);
-      setStoryDetails(null);
+    const loadData = async () => {
       setLoading(true);
       setError('');
       try {
@@ -203,17 +126,20 @@ export function SelectParentScreen({
       }
     };
 
-    loadEpicsAndTags();
+    loadData();
     return () => { isCancelled = true; };
   }, [accessToken, org, projectId]);
 
-  // Fetch epic details and stories when epic changes
+  // Fetch epic details and children when epic changes
   useEffect(() => {
-    if (!org || !epicId) return;
+    if (!epicId) return;
     let isCancelled = false;
 
-    const loadEpicDetailsAndStories = async () => {
+    const loadEpicDetailsAndChildren = async () => {
       setEpicDetails(null);
+      setFeatures([]);
+      setFeatureId('');
+      setFeatureDetails(null);
       setStories([]);
       setStoryId('');
       setStoryDetails(null);
@@ -222,19 +148,22 @@ export function SelectParentScreen({
       try {
         const epicIdNum = parseInt(epicId, 10);
 
-        // Fetch epic details and stories in parallel (if in Task mode)
-        if (isTaskMode && projectId) {
-          const [fetchedEpicDetails, fetchedStories] = await Promise.all([
-            fetchWorkItemDetails(accessToken, org, epicIdNum),
-            fetchStoriesByEpic(accessToken, org, projectId, epicIdNum),
-          ]);
+        // Fetch epic details
+        const fetchedEpicDetails = await fetchWorkItemDetails(accessToken, org, epicIdNum);
+        if (isCancelled) return;
+        setEpicDetails(fetchedEpicDetails);
+
+        // For Features: we're done (Feature goes under Epic)
+        // For UserStory: need to load features if available
+        // For Task: need to load stories
+        if (workItemType === 'UserStory' && hasFeatures) {
+          const fetchedFeatures = await fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum);
           if (isCancelled) return;
-          setEpicDetails(fetchedEpicDetails);
+          setFeatures(fetchedFeatures);
+        } else if (workItemType === 'Task') {
+          const fetchedStories = await fetchStoriesByEpic(accessToken, org, projectId, epicIdNum);
+          if (isCancelled) return;
           setStories(fetchedStories);
-        } else {
-          const fetchedEpicDetails = await fetchWorkItemDetails(accessToken, org, epicIdNum);
-          if (isCancelled) return;
-          setEpicDetails(fetchedEpicDetails);
         }
       } catch (err) {
         if (isCancelled) return;
@@ -248,13 +177,43 @@ export function SelectParentScreen({
       }
     };
 
-    loadEpicDetailsAndStories();
+    loadEpicDetailsAndChildren();
     return () => { isCancelled = true; };
-  }, [accessToken, org, projectId, epicId, isTaskMode]);
+  }, [accessToken, org, projectId, epicId, workItemType, hasFeatures]);
+
+  // Fetch feature details when feature changes
+  useEffect(() => {
+    if (!featureId) return;
+    let isCancelled = false;
+
+    const loadFeatureDetails = async () => {
+      setFeatureDetails(null);
+      setLoading(true);
+      setError('');
+      try {
+        const featureIdNum = parseInt(featureId, 10);
+        const fetchedFeatureDetails = await fetchWorkItemDetails(accessToken, org, featureIdNum);
+        if (isCancelled) return;
+        setFeatureDetails(fetchedFeatureDetails);
+      } catch (err) {
+        if (isCancelled) return;
+        if (err instanceof Error && err.name === 'AuthError') {
+          await handleAuthError();
+        } else {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+        }
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadFeatureDetails();
+    return () => { isCancelled = true; };
+  }, [accessToken, org, featureId]);
 
   // Fetch story details when story changes (Task mode only)
   useEffect(() => {
-    if (!org || !storyId || !isTaskMode) return;
+    if (!storyId || workItemType !== 'Task') return;
     let isCancelled = false;
 
     const loadStoryDetails = async () => {
@@ -280,7 +239,7 @@ export function SelectParentScreen({
 
     loadStoryDetails();
     return () => { isCancelled = true; };
-  }, [accessToken, org, storyId, isTaskMode]);
+  }, [accessToken, org, storyId, workItemType]);
 
   const toggleTag = (tag: string): void => {
     setSelectedTags((prev) =>
@@ -288,24 +247,55 @@ export function SelectParentScreen({
     );
   };
 
-  // For UserStory mode: need Epic selected
-  // For Task mode: need Epic AND Story selected
-  const canContinue = isTaskMode
-    ? org && projectId && epicId && storyId && storyDetails
-    : org && projectId && epicId && epicDetails;
+  // Determine if we can continue based on work item type
+  const canContinue = (() => {
+    switch (workItemType) {
+      case 'Feature':
+        // Features can optionally have an Epic parent
+        if (epicId) {
+          return !!epicDetails;
+        }
+        return true;
+      case 'UserStory':
+        // User Stories need an Epic or Feature parent
+        if (featureId) {
+          return !!featureDetails;
+        }
+        if (epicId) {
+          return !!epicDetails;
+        }
+        return false;
+      case 'Task':
+        // Tasks need a User Story parent
+        return !!(epicId && storyId && storyDetails);
+      default:
+        return false;
+    }
+  })();
 
   const handleContinue = () => {
     if (!canContinue) return;
 
-    const hierarchyContext: HierarchyContext = {
-      epic: epicDetails ? {
+    const hierarchyContext: HierarchyContext = {};
+
+    if (epicDetails) {
+      hierarchyContext.epic = {
         id: epicDetails.id,
         title: epicDetails.title,
         description: epicDetails.description,
-      } : undefined,
-    };
+      };
+    }
 
-    if (isTaskMode && storyDetails) {
+    if (featureDetails) {
+      hierarchyContext.feature = {
+        id: featureDetails.id,
+        title: featureDetails.title,
+        description: featureDetails.description,
+        acceptanceCriteria: featureDetails.acceptanceCriteria,
+      };
+    }
+
+    if (storyDetails) {
       hierarchyContext.userStory = {
         id: storyDetails.id,
         title: storyDetails.title,
@@ -314,67 +304,129 @@ export function SelectParentScreen({
       };
     }
 
-    const parentTitle = isTaskMode
-      ? storyDetails?.title || ''
-      : epicDetails?.title || '';
+    // Determine parent title for display
+    let parentTitle = '';
+    switch (workItemType) {
+      case 'Feature':
+        parentTitle = epicDetails?.title || '';
+        break;
+      case 'UserStory':
+        parentTitle = featureDetails?.title || epicDetails?.title || '';
+        break;
+      case 'Task':
+        parentTitle = storyDetails?.title || '';
+        break;
+    }
 
     onContinue({
-      org,
-      projectId,
       hierarchyContext,
       selectedTags,
       parentTitle,
     });
   };
 
-  const selectedEpic = epics.find((e) => e.id.toString() === epicId);
-  const selectedStory = stories.find((s) => s.id.toString() === storyId);
+  // Get screen title based on work item type
+  const getScreenTitle = (): string => {
+    switch (workItemType) {
+      case 'Feature':
+        return hasEpics && epics.length > 0 ? 'Select Parent Epic (Optional)' : 'Configure Feature';
+      case 'UserStory':
+        return 'Select Parent';
+      case 'Task':
+        return 'Select Parent Story';
+      default:
+        return 'Select Parent';
+    }
+  };
+
+  // Get info box text based on work item type
+  const getInfoText = (): string => {
+    switch (workItemType) {
+      case 'Feature':
+        return epicId
+          ? 'Epic context will be used to generate relevant features'
+          : 'Features will be created without a parent epic';
+      case 'UserStory':
+        return featureId
+          ? 'Feature context will be used to generate relevant user stories'
+          : 'Epic context will be used to generate relevant user stories';
+      case 'Task':
+        return 'Epic and story context will be used to generate relevant tasks';
+      default:
+        return 'Context will be used to generate relevant work items';
+    }
+  };
+
+  // Determine if Epic selector should be shown
+  const showEpicSelector = hasEpics && epics.length > 0 && (
+    workItemType === 'Feature' ||
+    workItemType === 'UserStory' ||
+    workItemType === 'Task'
+  );
+
+  // Determine if Feature selector should be shown
+  const showFeatureSelector = hasFeatures && workItemType === 'UserStory' && epicId && features.length > 0;
+
+  // Determine if Story selector should be shown
+  const showStorySelector = workItemType === 'Task' && hasUserStories;
 
   return (
     <div className="screen">
       <div className="screen-header">
-        <h2>{isTaskMode ? 'Select Parent Story' : 'Select Parent Epic'}</h2>
-        <p>
-          {workItemCount} {workItemCount === 1 ? itemLabel : itemLabelPlural} will be created
-          under this {isTaskMode ? 'user story' : 'epic'}
-        </p>
+        <h2>{getScreenTitle()}</h2>
+        <p>Select the parent work item for context</p>
       </div>
 
       {error && <div className="error-message">{error}</div>}
 
       <div className="select-group">
-        <Select
-          label="Organization"
-          value={org}
-          onChange={setOrg}
-          placeholder={loading && orgs.length === 0 ? 'Loading...' : 'Select an organization'}
-          options={orgs.map((o) => ({ value: o, label: o }))}
-        />
+        {showEpicSelector && (
+          <Select
+            label={workItemType === 'Feature' ? 'Epic (Optional)' : 'Epic'}
+            value={epicId}
+            onChange={(val) => {
+              setEpicId(val);
+              setFeatureId('');
+              setStoryId('');
+            }}
+            placeholder={
+              loading && epics.length === 0
+                ? 'Loading...'
+                : workItemType === 'Feature'
+                ? 'Select an epic (optional)'
+                : 'Select an epic'
+            }
+            options={
+              workItemType === 'Feature'
+                ? [{ value: '', label: '(No parent epic)' }, ...epics.map((e) => ({
+                    value: e.id.toString(),
+                    label: `#${e.id} - ${e.title}`,
+                  }))]
+                : epics.map((e) => ({
+                    value: e.id.toString(),
+                    label: `#${e.id} - ${e.title}`,
+                  }))
+            }
+          />
+        )}
 
-        <Select
-          label="Project"
-          value={projectId}
-          onChange={setProjectId}
-          placeholder={
-            !org ? 'Select an organization first' : loading ? 'Loading...' : 'Select a project'
-          }
-          options={projects.map((p) => ({ value: p.id, label: p.name }))}
-        />
+        {showFeatureSelector && (
+          <Select
+            label="Feature (Optional)"
+            value={featureId}
+            onChange={setFeatureId}
+            placeholder={loading ? 'Loading...' : 'Select a feature (optional)'}
+            options={[
+              { value: '', label: '(Create under Epic directly)' },
+              ...features.map((f) => ({
+                value: f.id.toString(),
+                label: `#${f.id} - ${f.title}`,
+              })),
+            ]}
+          />
+        )}
 
-        <Select
-          label="Epic"
-          value={epicId}
-          onChange={setEpicId}
-          placeholder={
-            !projectId ? 'Select a project first' : loading ? 'Loading...' : 'Select an epic'
-          }
-          options={epics.map((e) => ({
-            value: e.id.toString(),
-            label: `#${e.id} - ${e.title}`,
-          }))}
-        />
-
-        {isTaskMode && (
+        {showStorySelector && (
           <Select
             label="User Story"
             value={storyId}
@@ -394,11 +446,7 @@ export function SelectParentScreen({
             <circle cx="8" cy="8" r="6.5" stroke="#7c3aed" strokeWidth="1.5"/>
             <path d="M8 7v4M8 5v.5" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          <span>
-            {isTaskMode
-              ? 'Epic and story context will be used to generate relevant tasks'
-              : 'Epic context will be used to generate relevant user stories'}
-          </span>
+          <span>{getInfoText()}</span>
         </div>
 
         {availableTags.length > 0 && (

@@ -103,10 +103,21 @@ export function ReviewScreen({
     });
   };
 
-  const isUserStory = workItemType === 'UserStory';
-  const itemLabel = isUserStory ? 'User Stories' : 'Tasks';
-  const itemLabelSingular = isUserStory ? 'User Story' : 'Task';
-  const parentLabel = isUserStory ? 'Epic' : 'Story';
+  const getLabels = (): { plural: string; singular: string; parent: string; hasAcceptanceCriteria: boolean } => {
+    switch (workItemType) {
+      case 'Epic':
+        return { plural: 'Epics', singular: 'Epic', parent: 'Project', hasAcceptanceCriteria: true };
+      case 'Feature':
+        return { plural: 'Features', singular: 'Feature', parent: 'Epic', hasAcceptanceCriteria: true };
+      case 'UserStory':
+        return { plural: 'User Stories', singular: 'User Story', parent: 'Parent', hasAcceptanceCriteria: true };
+      case 'Task':
+      default:
+        return { plural: 'Tasks', singular: 'Task', parent: 'Story', hasAcceptanceCriteria: false };
+    }
+  };
+
+  const { plural: itemLabel, singular: itemLabelSingular, parent: parentLabel, hasAcceptanceCriteria } = getLabels();
 
   const totalItems = frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
   const selectedCount = frameWorkItems.reduce(
@@ -175,7 +186,7 @@ export function ReviewScreen({
                   onWorkItemUpdate(fwi.frameId, item.id, { description })
                 }
                 onAcceptanceCriteriaChange={
-                  isUserStory
+                  hasAcceptanceCriteria
                     ? (acceptanceCriteria) =>
                         onWorkItemUpdate(fwi.frameId, item.id, { acceptanceCriteria })
                     : undefined
@@ -201,9 +212,11 @@ export function ReviewScreen({
         <p>Edit or remove items before pushing to Azure</p>
       </div>
 
-      <div style={styles.parentInfo}>
-        Creating under {parentLabel}: <strong>{parentTitle}</strong>
-      </div>
+      {parentTitle && (
+        <div style={styles.parentInfo}>
+          Creating under {parentLabel}: <strong>{parentTitle}</strong>
+        </div>
+      )}
 
       <div className="task-list">
         {/* Render grouped frames by section */}

@@ -1,9 +1,14 @@
 import React from 'react';
-import { TaskToSubmit, WorkItemType } from '../types';
+import { WorkItemType } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
+interface WorkItemToSubmit {
+  id: string;
+  title: string;
+}
+
 interface SubmittingScreenProps {
-  tasks: TaskToSubmit[];
+  tasks: Array<{ taskId: string; title: string }> | WorkItemToSubmit[];
   workItemType?: WorkItemType;
   completedTaskIds: Set<string>;
 }
@@ -26,7 +31,17 @@ export function SubmittingScreen({
   workItemType = 'Task',
   completedTaskIds,
 }: SubmittingScreenProps): React.ReactElement {
-  const itemLabel = workItemType === 'UserStory' ? 'user stories' : 'tasks';
+  const getItemLabel = (): string => {
+    switch (workItemType) {
+      case 'Epic': return 'epics';
+      case 'Feature': return 'features';
+      case 'UserStory': return 'user stories';
+      case 'Task': return 'tasks';
+      default: return 'work items';
+    }
+  };
+
+  const itemLabel = getItemLabel();
 
   return (
     <div className="screen screen-center">
@@ -35,18 +50,21 @@ export function SubmittingScreen({
         sublabel="Pushing to Azure DevOps"
       />
       <div className="progress-list" style={{ marginTop: '16px' }}>
-        {tasks.map((task) => (
-          <div key={task.taskId} style={styles.item}>
-            <span style={styles.icon}>
-              {completedTaskIds.has(task.taskId) ? (
-                <span className="success-icon">&#10003;</span>
-              ) : (
-                '○'
-              )}
-            </span>
-            <span>{task.title}</span>
-          </div>
-        ))}
+        {tasks.map((task) => {
+          const id = 'taskId' in task ? task.taskId : task.id;
+          return (
+            <div key={id} style={styles.item}>
+              <span style={styles.icon}>
+                {completedTaskIds.has(id) ? (
+                  <span className="success-icon">&#10003;</span>
+                ) : (
+                  '○'
+                )}
+              </span>
+              <span>{task.title}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -63,7 +63,18 @@ export function GeneratingScreen({
 }: GeneratingScreenProps): React.ReactElement {
   const completedCount = completedFrameIds.size;
   const totalCount = frames.length;
-  const itemLabel = workItemType === 'UserStory' ? 'user stories' : 'tasks';
+
+  const getItemLabel = (): string => {
+    switch (workItemType) {
+      case 'Epic': return 'epics';
+      case 'Feature': return 'features';
+      case 'UserStory': return 'user stories';
+      case 'Task': return 'tasks';
+      default: return 'work items';
+    }
+  };
+
+  const itemLabel = getItemLabel();
 
   return (
     <div className="screen screen-center">

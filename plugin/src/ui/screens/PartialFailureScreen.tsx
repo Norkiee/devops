@@ -1,8 +1,8 @@
 import React from 'react';
-import { CreateTaskResult, CreateUserStoryResult, WorkItemType } from '../types';
+import { CreateTaskResult, CreateUserStoryResult, CreateEpicResult, CreateFeatureResult, WorkItemType } from '../types';
 import { Button } from '../components/Button';
 
-type SubmitResult = CreateTaskResult | CreateUserStoryResult;
+type SubmitResult = CreateTaskResult | CreateUserStoryResult | CreateEpicResult | CreateFeatureResult;
 
 interface PartialFailureScreenProps {
   results: SubmitResult[];
@@ -58,23 +58,36 @@ export function PartialFailureScreen({
 }: PartialFailureScreenProps): React.ReactElement {
   const successCount = results.filter((r) => r.success).length;
   const failCount = results.filter((r) => !r.success).length;
-  const isUserStory = workItemType === 'UserStory';
-  const itemLabel = isUserStory ? 'user story' : 'task';
-  const itemLabelPlural = isUserStory ? 'user stories' : 'tasks';
+
+  const getLabels = (): { singular: string; plural: string; button: string } => {
+    switch (workItemType) {
+      case 'Epic':
+        return { singular: 'epic', plural: 'epics', button: 'Epics' };
+      case 'Feature':
+        return { singular: 'feature', plural: 'features', button: 'Features' };
+      case 'UserStory':
+        return { singular: 'user story', plural: 'user stories', button: 'Stories' };
+      case 'Task':
+      default:
+        return { singular: 'task', plural: 'tasks', button: 'Tasks' };
+    }
+  };
+
+  const { singular, plural, button } = getLabels();
 
   return (
     <div className="screen screen-center">
       <div style={styles.icon}>!</div>
       <h2 style={styles.heading}>
-        {successCount} of {results.length} {results.length === 1 ? itemLabel : itemLabelPlural} created
+        {successCount} of {results.length} {results.length === 1 ? singular : plural} created
       </h2>
       <p style={styles.subtext}>
-        {failCount} {failCount === 1 ? itemLabel : itemLabelPlural} failed to create
+        {failCount} {failCount === 1 ? singular : plural} failed to create
       </p>
 
       <div className="progress-list" style={{ marginTop: '12px' }}>
         {results.map((result, index) => {
-          const id = 'workItemId' in result ? result.workItemId : result.taskId;
+          const id = 'workItemId' in result ? result.workItemId : ('taskId' in result ? result.taskId : '');
           return (
             <div key={id || index} style={styles.item}>
               <span style={styles.itemIcon}>
@@ -97,11 +110,11 @@ export function PartialFailureScreen({
 
       <div className="screen-footer" style={styles.buttons}>
         <Button onClick={onRetry} fullWidth>
-          Retry Failed {isUserStory ? 'Stories' : 'Tasks'}
+          Retry Failed {button}
         </Button>
         {successCount > 0 && (
           <Button onClick={onViewSuccessful} variant="secondary" fullWidth>
-            View Successful {isUserStory ? 'Stories' : 'Tasks'}
+            View Successful {button}
           </Button>
         )}
       </div>

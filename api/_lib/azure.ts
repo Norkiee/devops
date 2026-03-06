@@ -1,4 +1,4 @@
-import { AzureProject, AzureStory, AzureTask, AzureUserStory, AzureWorkItemDetails } from './types';
+import { AzureProject, AzureStory, AzureTask, AzureUserStory, AzureWorkItemDetails, AzureEpic, AzureFeature } from './types';
 
 const AZURE_API_VERSION = '7.1';
 const FETCH_TIMEOUT_MS = 30000; // 30 second timeout
@@ -423,6 +423,241 @@ export async function createUserStory(
 
   const response = await azureFetch(
     `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$User%20Story?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json-patch+json' },
+      body: JSON.stringify(patchDoc),
+    }
+  );
+  const data = (await response.json()) as {
+    id: number;
+    _links?: { html?: { href?: string } };
+  };
+  return {
+    id: data.id,
+    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+  };
+}
+
+// Supported work item type names we care about
+export type SupportedWorkItemType = 'Epic' | 'Feature' | 'User Story' | 'Product Backlog Item' | 'Requirement' | 'Issue' | 'Task';
+
+export interface WorkItemTypeInfo {
+  name: string;
+  referenceName: string;
+  description?: string;
+  icon?: string;
+}
+
+export async function getWorkItemTypes(
+  opts: AzureApiOptions & { projectId: string }
+): Promise<WorkItemTypeInfo[]> {
+  const response = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitemtypes?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken
+  );
+  const data = (await response.json()) as {
+    value: Array<{
+      name: string;
+      referenceName: string;
+      description?: string;
+      icon?: { url?: string };
+    }>;
+  };
+
+  // Filter to only return supported types that exist in this project
+  const supportedTypes: SupportedWorkItemType[] = [
+    'Epic',
+    'Feature',
+    'User Story',
+    'Product Backlog Item',
+    'Requirement',
+    'Issue',
+    'Task',
+  ];
+
+  return data.value
+    .filter((wit) => supportedTypes.includes(wit.name as SupportedWorkItemType))
+    .map((wit) => ({
+      name: wit.name,
+      referenceName: wit.referenceName,
+      description: wit.description,
+      icon: wit.icon?.url,
+    }));
+}
+
+export async function queryFeatures(
+  opts: AzureApiOptions & { projectId: string }
+): Promise<AzureStory[]> {
+  const wiqlQuery = {
+    query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
+            FROM WorkItems
+            WHERE [System.WorkItemType] = 'Feature'
+            AND [System.State] <> 'Closed'
+            AND [System.State] <> 'Removed'
+            ORDER BY [System.ChangedDate] DESC`,
+  };
+
+  const wiqlResponse = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken,
+    { method: 'POST', body: JSON.stringify(wiqlQuery) }
+  );
+  const wiqlData = (await wiqlResponse.json()) as {
+    workItems?: Array<{ id: number }>;
+  };
+
+  if (!wiqlData.workItems || wiqlData.workItems.length === 0) {
+    return [];
+  }
+
+  const ids = wiqlData.workItems.slice(0, 50).map((wi) => wi.id);
+  const idsParam = ids.join(',');
+
+  const detailResponse = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    opts.accessToken
+  );
+  const detailData = (await detailResponse.json()) as {
+    value: Array<{ id: number; fields: Record<string, string> }>;
+  };
+
+  return detailData.value.map((wi) => ({
+    id: wi.id,
+    title: wi.fields['System.Title'],
+    state: wi.fields['System.State'],
+    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
+  }));
+}
+
+export async function queryFeaturesByEpic(
+  opts: AzureApiOptions & { projectId: string; epicId: number }
+): Promise<AzureStory[]> {
+  const wiqlQuery = {
+    query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
+            FROM WorkItemLinks
+            WHERE ([Source].[System.Id] = ${opts.epicId})
+            AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward')
+            AND ([Target].[System.WorkItemType] = 'Feature')
+            AND ([Target].[System.State] <> 'Closed')
+            AND ([Target].[System.State] <> 'Removed')
+            MODE (MustContain)`,
+  };
+
+  const wiqlResponse = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken,
+    { method: 'POST', body: JSON.stringify(wiqlQuery) }
+  );
+  const wiqlData = (await wiqlResponse.json()) as {
+    workItemRelations?: Array<{ target?: { id: number } }>;
+  };
+
+  if (!wiqlData.workItemRelations || wiqlData.workItemRelations.length === 0) {
+    return [];
+  }
+
+  const ids = wiqlData.workItemRelations
+    .filter((rel) => rel.target?.id)
+    .map((rel) => rel.target!.id)
+    .slice(0, 50);
+
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const idsParam = ids.join(',');
+
+  const detailResponse = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    opts.accessToken
+  );
+  const detailData = (await detailResponse.json()) as {
+    value: Array<{ id: number; fields: Record<string, string> }>;
+  };
+
+  return detailData.value.map((wi) => ({
+    id: wi.id,
+    title: wi.fields['System.Title'],
+    state: wi.fields['System.State'],
+    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
+  }));
+}
+
+export async function createEpic(
+  opts: AzureApiOptions & { projectId: string },
+  epic: AzureEpic
+): Promise<{ id: number; url: string }> {
+  const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
+    { op: 'add', path: '/fields/System.Title', value: epic.title },
+    { op: 'add', path: '/fields/System.Description', value: epic.description },
+    { op: 'add', path: '/fields/System.State', value: 'New' },
+    { op: 'add', path: '/fields/System.Tags', value: epic.tags.join('; ') },
+  ];
+
+  // Add acceptance criteria if provided
+  if (epic.acceptanceCriteria) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
+      value: epic.acceptanceCriteria,
+    });
+  }
+
+  const response = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Epic?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json-patch+json' },
+      body: JSON.stringify(patchDoc),
+    }
+  );
+  const data = (await response.json()) as {
+    id: number;
+    _links?: { html?: { href?: string } };
+  };
+  return {
+    id: data.id,
+    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+  };
+}
+
+export async function createFeature(
+  opts: AzureApiOptions & { projectId: string },
+  feature: AzureFeature
+): Promise<{ id: number; url: string }> {
+  const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
+    { op: 'add', path: '/fields/System.Title', value: feature.title },
+    { op: 'add', path: '/fields/System.Description', value: feature.description },
+    { op: 'add', path: '/fields/System.State', value: 'New' },
+    { op: 'add', path: '/fields/System.Tags', value: feature.tags.join('; ') },
+  ];
+
+  // Add parent epic link if provided
+  if (feature.parentEpicId) {
+    patchDoc.push({
+      op: 'add',
+      path: '/relations/-',
+      value: {
+        rel: 'System.LinkTypes.Hierarchy-Reverse',
+        url: `https://dev.azure.com/${opts.org}/_apis/wit/workItems/${feature.parentEpicId}`,
+      },
+    });
+  }
+
+  // Add acceptance criteria if provided
+  if (feature.acceptanceCriteria) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
+      value: feature.acceptanceCriteria,
+    });
+  }
+
+  const response = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Feature?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'POST',

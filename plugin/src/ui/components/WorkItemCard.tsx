@@ -111,7 +111,21 @@ export function WorkItemCard({
   onAcceptanceCriteriaChange,
   onRemoveTag,
 }: WorkItemCardProps): React.ReactElement {
-  const isUserStory = workItemType === 'UserStory';
+  const getLabels = (): { itemLabel: string; titlePlaceholder: string; hasAcceptanceCriteria: boolean } => {
+    switch (workItemType) {
+      case 'Epic':
+        return { itemLabel: 'epic', titlePlaceholder: 'Epic title...', hasAcceptanceCriteria: true };
+      case 'Feature':
+        return { itemLabel: 'feature', titlePlaceholder: 'Feature title...', hasAcceptanceCriteria: true };
+      case 'UserStory':
+        return { itemLabel: 'story', titlePlaceholder: 'User can...', hasAcceptanceCriteria: true };
+      case 'Task':
+      default:
+        return { itemLabel: 'task', titlePlaceholder: 'Task title...', hasAcceptanceCriteria: false };
+    }
+  };
+
+  const { itemLabel, titlePlaceholder, hasAcceptanceCriteria } = getLabels();
 
   return (
     <div style={selected ? styles.card : styles.cardDeselected}>
@@ -121,7 +135,7 @@ export function WorkItemCard({
           checked={selected}
           onChange={onToggleSelect}
           style={styles.checkbox}
-          aria-label={`Select ${isUserStory ? 'story' : 'task'}: ${title}`}
+          aria-label={`Select ${itemLabel}: ${title}`}
         />
         <div style={styles.content}>
           {selected ? (
@@ -131,7 +145,7 @@ export function WorkItemCard({
                 value={title}
                 onChange={(e) => onTitleChange(e.target.value)}
                 style={styles.input}
-                placeholder={isUserStory ? 'User can...' : 'Task title...'}
+                placeholder={titlePlaceholder}
               />
               <textarea
                 value={description}
@@ -140,7 +154,7 @@ export function WorkItemCard({
                 style={styles.textarea}
                 placeholder="Description..."
               />
-              {isUserStory && onAcceptanceCriteriaChange && (
+              {hasAcceptanceCriteria && onAcceptanceCriteriaChange && (
                 <div>
                   <label style={styles.fieldLabel}>Acceptance Criteria</label>
                   <textarea

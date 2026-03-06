@@ -1,5 +1,5 @@
 // Work item types that can be generated
-export type WorkItemType = 'UserStory' | 'Task';
+export type WorkItemType = 'Epic' | 'Feature' | 'UserStory' | 'Task';
 
 // Hierarchy context for AI generation
 export interface HierarchyContext {
@@ -7,6 +7,12 @@ export interface HierarchyContext {
     id: number;
     title: string;
     description?: string;
+  };
+  feature?: {
+    id: number;
+    title: string;
+    description?: string;
+    acceptanceCriteria?: string;
   };
   userStory?: {
     id: number;
@@ -113,6 +119,23 @@ export interface AzureUserStory {
   description: string;
   acceptanceCriteria?: string;
   parentEpicId: number;
+  tags: string[];
+  state: 'New';
+}
+
+export interface AzureEpic {
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  tags: string[];
+  state: 'New';
+}
+
+export interface AzureFeature {
+  title: string;
+  description: string;
+  acceptanceCriteria?: string;
+  parentEpicId?: number;
   tags: string[];
   state: 'New';
 }

@@ -33,8 +33,27 @@ export function ContextScreen({
 }: ContextScreenProps): React.ReactElement {
   const [context, setContext] = useState('');
 
-  const isUserStory = workItemType === 'UserStory';
-  const itemLabel = isUserStory ? 'user stories' : 'tasks';
+  const getItemLabel = (): string => {
+    switch (workItemType) {
+      case 'Epic': return 'epics';
+      case 'Feature': return 'features';
+      case 'UserStory': return 'user stories';
+      case 'Task': return 'tasks';
+      default: return 'work items';
+    }
+  };
+
+  const getButtonLabel = (): string => {
+    switch (workItemType) {
+      case 'Epic': return 'Epics';
+      case 'Feature': return 'Features';
+      case 'UserStory': return 'User Stories';
+      case 'Task': return 'Tasks';
+      default: return 'Work Items';
+    }
+  };
+
+  const itemLabel = getItemLabel();
 
   // Group frames by section for display
   const framesBySection: Record<string, FrameData[]> = {};
@@ -96,7 +115,7 @@ export function ContextScreen({
           onClick={() => onGenerate(context || undefined)}
           fullWidth
         >
-          Generate {isUserStory ? 'User Stories' : 'Tasks'}
+          Generate {getButtonLabel()}
         </Button>
         <Button onClick={onBack} variant="text" fullWidth>
           Back

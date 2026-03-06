@@ -1,8 +1,8 @@
 import React from 'react';
-import { CreateTaskResult, CreateUserStoryResult, WorkItemType } from '../types';
+import { CreateTaskResult, CreateUserStoryResult, CreateEpicResult, CreateFeatureResult, WorkItemType } from '../types';
 import { Button } from '../components/Button';
 
-type SubmitResult = CreateTaskResult | CreateUserStoryResult;
+type SubmitResult = CreateTaskResult | CreateUserStoryResult | CreateEpicResult | CreateFeatureResult;
 
 interface SuccessScreenProps {
   results: SubmitResult[];
@@ -51,28 +51,45 @@ export function SuccessScreen({
   onCreateMore,
 }: SuccessScreenProps): React.ReactElement {
   const successCount = results.filter((r) => r.success).length;
-  const isUserStory = workItemType === 'UserStory';
-  const itemLabel = isUserStory ? 'user story' : 'task';
-  const itemLabelPlural = isUserStory ? 'user stories' : 'tasks';
-  const parentLabel = isUserStory ? 'Epic' : 'Story';
+
+  const getLabels = (): { singular: string; plural: string; parent: string; button: string } => {
+    switch (workItemType) {
+      case 'Epic':
+        return { singular: 'epic', plural: 'epics', parent: 'Project', button: 'Epics' };
+      case 'Feature':
+        return { singular: 'feature', plural: 'features', parent: 'Epic', button: 'Features' };
+      case 'UserStory':
+        return { singular: 'user story', plural: 'user stories', parent: 'Parent', button: 'Stories' };
+      case 'Task':
+      default:
+        return { singular: 'task', plural: 'tasks', parent: 'Story', button: 'Tasks' };
+    }
+  };
+
+  const { singular, plural, parent, button } = getLabels();
 
   return (
     <div className="screen screen-center">
       <div style={styles.icon}>&#10003;</div>
       <h2 style={styles.heading}>
-        {successCount} {successCount === 1 ? itemLabel : itemLabelPlural} created!
+        {successCount} {successCount === 1 ? singular : plural} created!
       </h2>
-      <p style={styles.detail}>
-        {parentLabel}: {parentTitle}
-        {tags.length > 0 && ` | Tags: ${tags.join(', ')}`}
-      </p>
+      {parentTitle && (
+        <p style={styles.detail}>
+          {parent}: {parentTitle}
+          {tags.length > 0 && ` | Tags: ${tags.join(', ')}`}
+        </p>
+      )}
+      {!parentTitle && tags.length > 0 && (
+        <p style={styles.detail}>Tags: {tags.join(', ')}</p>
+      )}
 
       <div className="screen-footer" style={styles.buttons}>
         <Button onClick={onViewInAzure} fullWidth>
           View in Azure DevOps
         </Button>
         <Button onClick={onCreateMore} variant="secondary" fullWidth>
-          Create More {isUserStory ? 'Stories' : 'Tasks'}
+          Create More {button}
         </Button>
       </div>
     </div>
