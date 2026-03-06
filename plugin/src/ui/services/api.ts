@@ -210,7 +210,7 @@ export async function fetchTags(
   projectId: string
 ): Promise<string[]> {
   const data = await request<{ tags: string[] }>(
-    `/api/azure/tags?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}`,
+    `/api/azure/projects?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}&include=tags`,
     { headers: authHeaders(accessToken) }
   );
   return data.tags;
@@ -249,7 +249,7 @@ export async function createUserStories(
   stories: UserStoryToSubmit[]
 ): Promise<CreateUserStoryResult[]> {
   const data = await request<{ results: CreateUserStoryResult[] }>(
-    `/api/azure/userstories?org=${encodeURIComponent(org)}`,
+    `/api/azure/stories?org=${encodeURIComponent(org)}`,
     {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -275,7 +275,7 @@ export async function fetchWorkItemTypes(
   projectId: string
 ): Promise<WorkItemTypeInfo[]> {
   const data = await request<{ workItemTypes: WorkItemTypeInfo[] }>(
-    `/api/azure/workitemtypes?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}`,
+    `/api/azure/projects?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}`,
     { headers: authHeaders(accessToken) }
   );
   return data.workItemTypes;
@@ -313,7 +313,7 @@ export async function createEpics(
   epics: EpicToSubmit[]
 ): Promise<CreateEpicResult[]> {
   const data = await request<{ results: CreateEpicResult[] }>(
-    `/api/azure/epics/create?org=${encodeURIComponent(org)}`,
+    `/api/azure/epics?org=${encodeURIComponent(org)}`,
     {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -339,7 +339,7 @@ export async function createFeatures(
   features: FeatureToSubmit[]
 ): Promise<CreateFeatureResult[]> {
   const data = await request<{ results: CreateFeatureResult[] }>(
-    `/api/azure/features/create?org=${encodeURIComponent(org)}`,
+    `/api/azure/features?org=${encodeURIComponent(org)}`,
     {
       method: 'POST',
       headers: authHeaders(accessToken),
