@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { WorkItemType, AzureStory, HierarchyContext, AzureWorkItemDetails, WorkItemTypeInfo } from '../types';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
@@ -80,9 +80,9 @@ export function SelectParentScreen({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Determine what work item types are available
-  const hasEpics = availableTypes.some((t) => t.name === 'Epic');
-  const hasFeatures = availableTypes.some((t) => t.name === 'Feature');
-  const hasUserStories = availableTypes.some((t) => t.name === 'User Story');
+  const hasEpics = useMemo(() => availableTypes.some((t) => t.name === 'Epic'), [availableTypes]);
+  const hasFeatures = useMemo(() => availableTypes.some((t) => t.name === 'Feature'), [availableTypes]);
+  const hasUserStories = useMemo(() => availableTypes.some((t) => t.name === 'User Story'), [availableTypes]);
 
   // Helper to handle auth errors with refresh attempt
   const handleAuthError = async (): Promise<boolean> => {
@@ -148,22 +148,30 @@ export function SelectParentScreen({
       try {
         const epicIdNum = parseInt(epicId, 10);
 
-        // Fetch epic details
-        const fetchedEpicDetails = await fetchWorkItemDetails(accessToken, org, epicIdNum);
+        // Fetch epic details and children in parallel
+        const detailsPromise = fetchWorkItemDetails(accessToken, org, epicIdNum);
+        let childrenPromise: Promise<AzureStory[]> | null = null;
+
+        if (workItemType === 'UserStory' && hasFeatures) {
+          childrenPromise = fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum);
+        } else if (workItemType === 'Task') {
+          childrenPromise = fetchStoriesByEpic(accessToken, org, projectId, epicIdNum);
+        }
+
+        const [fetchedEpicDetails, fetchedChildren] = await Promise.all([
+          detailsPromise,
+          childrenPromise,
+        ]);
+
         if (isCancelled) return;
         setEpicDetails(fetchedEpicDetails);
 
-        // For Features: we're done (Feature goes under Epic)
-        // For UserStory: need to load features if available
-        // For Task: need to load stories
-        if (workItemType === 'UserStory' && hasFeatures) {
-          const fetchedFeatures = await fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum);
-          if (isCancelled) return;
-          setFeatures(fetchedFeatures);
-        } else if (workItemType === 'Task') {
-          const fetchedStories = await fetchStoriesByEpic(accessToken, org, projectId, epicIdNum);
-          if (isCancelled) return;
-          setStories(fetchedStories);
+        if (fetchedChildren) {
+          if (workItemType === 'UserStory' && hasFeatures) {
+            setFeatures(fetchedChildren);
+          } else if (workItemType === 'Task') {
+            setStories(fetchedChildren);
+          }
         }
       } catch (err) {
         if (isCancelled) return;
@@ -463,7 +471,7 @@ export function SelectParentScreen({
               Tags
             </label>
             <div className="tags-container">
-              {availableTags.map((tag) => (
+              {availableTags.slice(0, 50).map((tag) => (
                 <Tag
                   key={tag}
                   label={tag}

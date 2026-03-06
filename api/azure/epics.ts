@@ -105,7 +105,7 @@ export default async function handler(
       );
 
       const hasAuthError = results.some(
-        (r) => !r.success && r.error?.toLowerCase().includes('auth')
+        (r) => !r.success && r.error && isAzureAuthError(new Error(r.error))
       );
       if (hasAuthError) {
         res.status(401).json({ error: 'Session expired', results });
