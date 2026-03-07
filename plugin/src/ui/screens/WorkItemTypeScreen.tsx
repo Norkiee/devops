@@ -39,20 +39,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '16px',
   },
   epicIcon: {
-    background: '#fef3c7',
-    color: '#d97706',
+    background: '#FFF4E5',
+    color: '#FF7B00',
   },
   featureIcon: {
-    background: '#e0e7ff',
-    color: '#4f46e5',
+    background: '#F3E8FF',
+    color: '#773B93',
   },
   storyIcon: {
-    background: '#dbeafe',
-    color: '#2563eb',
+    background: '#E5F6FF',
+    color: '#009CCC',
   },
   taskIcon: {
-    background: '#dcfce7',
-    color: '#16a34a',
+    background: '#FFFBE5',
+    color: '#F2CB1D',
   },
   optionTitle: {
     fontSize: '15px',
@@ -99,12 +99,12 @@ const typeConfigs: TypeConfig[] = [
     type: 'Epic',
     azureName: 'Epic',
     title: 'Epics',
-    description: 'Create high-level epics representing major product initiatives',
+    description: 'Create high-level epics representing major design initiatives',
     iconStyle: styles.epicIcon,
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-        <path d="M8 6V10M6 8H10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      // Azure DevOps Epic icon - lightning bolt/crown
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z"/>
       </svg>
     ),
   },
@@ -112,14 +112,12 @@ const typeConfigs: TypeConfig[] = [
     type: 'Feature',
     azureName: 'Feature',
     title: 'Features',
-    description: 'Create features with acceptance criteria under an Epic',
+    description: 'Create features under an Epic',
     iconStyle: styles.featureIcon,
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-        <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+      // Azure DevOps Feature icon - trophy/rocket
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 2L5.5 5.5H2L4 8l-2 4h4l2 2 2-2h4l-2-4 2-2.5h-3.5L8 2zm0 2.5l1.5 2h2l-1 1.5 1 2.5h-2L8 12l-1.5-1.5H4.5l1-2.5-1-1.5h2L8 4.5z"/>
       </svg>
     ),
   },
@@ -127,12 +125,13 @@ const typeConfigs: TypeConfig[] = [
     type: 'UserStory',
     azureName: 'User Story',
     title: 'User Stories',
-    description: 'Create user stories with acceptance criteria under an Epic or Feature',
+    description: 'Create user stories under an Epic or Feature',
     iconStyle: styles.storyIcon,
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      // Azure DevOps User Story icon - book
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11zM4.5 2a.5.5 0 00-.5.5v11a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-11a.5.5 0 00-.5-.5h-7z"/>
+        <path d="M5 4h6v1H5V4zm0 2h6v1H5V6zm0 2h4v1H5V8z"/>
       </svg>
     ),
   },
@@ -140,12 +139,13 @@ const typeConfigs: TypeConfig[] = [
     type: 'Task',
     azureName: 'Task',
     title: 'Tasks',
-    description: 'Create development tasks under a User Story',
+    description: 'Create design tasks under a User Story',
     iconStyle: styles.taskIcon,
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      // Azure DevOps Task icon - checkbox
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M2.5 2A1.5 1.5 0 001 3.5v9A1.5 1.5 0 002.5 14h9a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011.5 2h-9zM2 3.5a.5.5 0 01.5-.5h9a.5.5 0 01.5.5v9a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5v-9z"/>
+        <path d="M10.354 5.354l-4 4a.5.5 0 01-.708 0l-2-2a.5.5 0 11.708-.708L6 8.293l3.646-3.647a.5.5 0 01.708.708z"/>
       </svg>
     ),
   },
