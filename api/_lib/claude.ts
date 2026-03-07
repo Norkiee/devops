@@ -622,7 +622,7 @@ export async function generateWorkItemsForFrame(
       workItems = parsedStories.map((story, index) => ({
         id: `${frame.id}-${index + 1}`,
         title: story.title,
-        description: story.description,
+        // User Stories don't have description - title uses "As a user..." format
         acceptanceCriteria: story.acceptanceCriteria,
         selected: true,
       }));

@@ -6,13 +6,13 @@ interface WorkItemCardProps {
   workItemId: string;
   workItemType: WorkItemType;
   title: string;
-  description: string;
+  description?: string;
   acceptanceCriteria?: string;
   tags: string[];
   selected: boolean;
   onToggleSelect: () => void;
   onTitleChange: (title: string) => void;
-  onDescriptionChange: (description: string) => void;
+  onDescriptionChange?: (description: string) => void;
   onAcceptanceCriteriaChange?: (criteria: string) => void;
   onRemoveTag: (tag: string) => void;
 }
@@ -111,21 +111,21 @@ export function WorkItemCard({
   onAcceptanceCriteriaChange,
   onRemoveTag,
 }: WorkItemCardProps): React.ReactElement {
-  const getLabels = (): { itemLabel: string; titlePlaceholder: string; hasAcceptanceCriteria: boolean } => {
+  const getLabels = (): { itemLabel: string; titlePlaceholder: string; hasDescription: boolean; hasAcceptanceCriteria: boolean } => {
     switch (workItemType) {
       case 'Epic':
-        return { itemLabel: 'epic', titlePlaceholder: 'Epic title...', hasAcceptanceCriteria: true };
+        return { itemLabel: 'epic', titlePlaceholder: 'Epic title...', hasDescription: true, hasAcceptanceCriteria: true };
       case 'Feature':
-        return { itemLabel: 'feature', titlePlaceholder: 'Feature title...', hasAcceptanceCriteria: true };
+        return { itemLabel: 'feature', titlePlaceholder: 'Feature title...', hasDescription: true, hasAcceptanceCriteria: true };
       case 'UserStory':
-        return { itemLabel: 'story', titlePlaceholder: 'User can...', hasAcceptanceCriteria: true };
+        return { itemLabel: 'story', titlePlaceholder: 'As a user, I want... so that...', hasDescription: false, hasAcceptanceCriteria: true };
       case 'Task':
       default:
-        return { itemLabel: 'task', titlePlaceholder: 'Task title...', hasAcceptanceCriteria: false };
+        return { itemLabel: 'task', titlePlaceholder: 'Task title...', hasDescription: true, hasAcceptanceCriteria: false };
     }
   };
 
-  const { itemLabel, titlePlaceholder, hasAcceptanceCriteria } = getLabels();
+  const { itemLabel, titlePlaceholder, hasDescription, hasAcceptanceCriteria } = getLabels();
 
   return (
     <div style={selected ? styles.card : styles.cardDeselected}>
@@ -147,13 +147,15 @@ export function WorkItemCard({
                 style={styles.input}
                 placeholder={titlePlaceholder}
               />
-              <textarea
-                value={description}
-                onChange={(e) => onDescriptionChange(e.target.value)}
-                rows={3}
-                style={styles.textarea}
-                placeholder="Description..."
-              />
+              {hasDescription && onDescriptionChange && (
+                <textarea
+                  value={description || ''}
+                  onChange={(e) => onDescriptionChange(e.target.value)}
+                  rows={3}
+                  style={styles.textarea}
+                  placeholder="Description..."
+                />
+              )}
               {hasAcceptanceCriteria && onAcceptanceCriteriaChange && (
                 <div>
                   <label style={styles.fieldLabel}>Acceptance Criteria</label>

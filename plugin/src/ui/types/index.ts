@@ -59,8 +59,8 @@ export interface SectionData {
 export interface WorkItem {
   id: string;
   title: string;
-  description: string;
-  acceptanceCriteria?: string; // Only for User Stories
+  description?: string; // Optional - not used for User Stories
+  acceptanceCriteria?: string; // Only for Epics, Features, User Stories
   selected: boolean;
 }
 

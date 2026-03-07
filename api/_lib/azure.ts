@@ -396,11 +396,6 @@ export async function createUserStory(
     { op: 'add', path: '/fields/System.Title', value: story.title },
     {
       op: 'add',
-      path: '/fields/System.Description',
-      value: story.description,
-    },
-    {
-      op: 'add',
       path: '/fields/System.Tags',
       value: story.tags.join('; '),
     },
@@ -413,6 +408,15 @@ export async function createUserStory(
       },
     },
   ];
+
+  // Add description if provided
+  if (story.description) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.Description',
+      value: story.description,
+    });
+  }
 
   // Add acceptance criteria if provided
   if (story.acceptanceCriteria) {
