@@ -170,26 +170,28 @@ You will receive:
 - Parent Epic context (if provided)
 - Optional context from the designer
 
-Your job: Create 1-3 User Stories that describe design work for this specific frame.
+Your job: Create 1-3 User Stories for this specific frame.
 
 IMPORTANT:
 - Stories should be about designing what's IN the frame, not generic design work
-- Use the frame name in your titles (e.g., "Complete [frame name] mockups")
 - Reference actual elements from text content and components
 - If there's a parent Epic, stories should clearly contribute to it
-- Write as a designer would: practical, specific, focused on deliverables
+- Write naturally and specifically based on the frame content
 
 Story format:
-- Title: What design deliverable will be completed (reference the frame/screen name)
-- Description: Brief context on what needs to be designed and why
-- Acceptance Criteria: Specific deliverables - mockups, states, specs, prototypes
+- Title: Must follow the format "As a [user type], I want [what] so that [why]"
+- Acceptance Criteria: Specific deliverables and conditions for completion
+
+Example titles:
+- "As a designer, I want to finalize the Login Screen mockups so that development can begin"
+- "As a user, I want to see clear error states on the form so that I know what to fix"
+- "As a product team, I want an interactive prototype of the checkout flow so that we can test with users"
 
 Output JSON:
 {
   "stories": [
     {
-      "title": "string - design deliverable for this specific frame",
-      "description": "string - what needs to be designed",
+      "title": "string - As a [user], I want [what] so that [why]",
       "acceptanceCriteria": "string - bullet points of deliverables"
     }
   ]
@@ -357,7 +359,7 @@ interface ParsedTask {
 
 interface ParsedUserStory {
   title: string;
-  description: string;
+  description?: string;
   acceptanceCriteria?: string;
 }
 
@@ -434,12 +436,9 @@ function parseUserStoryResponse(text: string): ParsedUserStory[] {
     if (typeof s.title !== 'string' || !s.title) {
       throw new Error(`Story ${index}: Missing or invalid title`);
     }
-    if (typeof s.description !== 'string' || !s.description) {
-      throw new Error(`Story ${index}: Missing or invalid description`);
-    }
     return {
       title: s.title,
-      description: s.description,
+      description: typeof s.description === 'string' ? s.description : undefined,
       acceptanceCriteria: typeof s.acceptanceCriteria === 'string' ? s.acceptanceCriteria : undefined,
     };
   });
