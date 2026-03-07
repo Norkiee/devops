@@ -97,7 +97,7 @@ export interface AzureStory {
 export interface TaskToSubmit {
   taskId: string;
   title: string;
-  description: string;
+  description?: string;
   tags: string[];
   parentStoryId: number;
 }
@@ -113,7 +113,7 @@ export interface CreateTaskResult {
 export interface UserStoryToSubmit {
   workItemId: string;
   title: string;
-  description: string;
+  description?: string; // Not used - User Stories use "As a user..." title format
   acceptanceCriteria?: string;
   tags: string[];
   parentEpicId: number;
@@ -122,7 +122,7 @@ export interface UserStoryToSubmit {
 export interface EpicToSubmit {
   workItemId: string;
   title: string;
-  description: string;
+  description?: string;
   acceptanceCriteria?: string;
   tags: string[];
 }
@@ -130,7 +130,7 @@ export interface EpicToSubmit {
 export interface FeatureToSubmit {
   workItemId: string;
   title: string;
-  description: string;
+  description?: string;
   acceptanceCriteria?: string;
   parentEpicId?: number;
   tags: string[];
