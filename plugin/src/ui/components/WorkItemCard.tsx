@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { WorkItemType } from '../types';
 import { Tag } from './Tag';
 
@@ -55,7 +55,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column' as const,
     gap: '8px',
   },
-  input: {
+  titleTextarea: {
     padding: '6px 8px',
     borderRadius: '4px',
     border: '1px solid #e0e0e0',
@@ -65,6 +65,10 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box' as const,
+    resize: 'none' as const,
+    overflow: 'hidden',
+    lineHeight: '1.4',
+    minHeight: '32px',
   },
   textarea: {
     padding: '6px 8px',
@@ -126,6 +130,15 @@ export function WorkItemCard({
   };
 
   const { itemLabel, titlePlaceholder, hasDescription, hasAcceptanceCriteria } = getLabels();
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize title textarea
+  useEffect(() => {
+    if (titleRef.current) {
+      titleRef.current.style.height = 'auto';
+      titleRef.current.style.height = `${titleRef.current.scrollHeight}px`;
+    }
+  }, [title]);
 
   return (
     <div style={selected ? styles.card : styles.cardDeselected}>
@@ -140,12 +153,13 @@ export function WorkItemCard({
         <div style={styles.content}>
           {selected ? (
             <>
-              <input
-                type="text"
+              <textarea
+                ref={titleRef}
                 value={title}
                 onChange={(e) => onTitleChange(e.target.value)}
-                style={styles.input}
+                style={styles.titleTextarea}
                 placeholder={titlePlaceholder}
+                rows={1}
               />
               {hasDescription && onDescriptionChange && (
                 <textarea
