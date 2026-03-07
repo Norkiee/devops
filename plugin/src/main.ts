@@ -124,7 +124,7 @@ function getSelectedFrames(): SelectionResult {
   return { frames, sections };
 }
 
-figma.showUI(__html__, { width: 500, height: 520 });
+figma.showUI(__html__, { width: 700, height: 520 });
 
 figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number }) => {
   if (msg.type === 'get-selection') {
@@ -143,7 +143,7 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
 
   if (msg.type === 'resize') {
     const height = Math.min(Math.max(msg.height || 200, 200), 800);
-    figma.ui.resize(500, height);
+    figma.ui.resize(700, height);
   }
 };
 
