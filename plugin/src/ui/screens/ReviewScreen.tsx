@@ -103,21 +103,21 @@ export function ReviewScreen({
     });
   };
 
-  const getLabels = (): { plural: string; singular: string; parent: string; hasAcceptanceCriteria: boolean } => {
+  const getLabels = (): { plural: string; singular: string; parent: string } => {
     switch (workItemType) {
       case 'Epic':
-        return { plural: 'Epics', singular: 'Epic', parent: 'Project', hasAcceptanceCriteria: true };
+        return { plural: 'Epics', singular: 'Epic', parent: 'Project' };
       case 'Feature':
-        return { plural: 'Features', singular: 'Feature', parent: 'Epic', hasAcceptanceCriteria: true };
+        return { plural: 'Features', singular: 'Feature', parent: 'Epic' };
       case 'UserStory':
-        return { plural: 'User Stories', singular: 'User Story', parent: 'Parent', hasAcceptanceCriteria: true };
+        return { plural: 'User Stories', singular: 'User Story', parent: 'Parent' };
       case 'Task':
       default:
-        return { plural: 'Tasks', singular: 'Task', parent: 'Story', hasAcceptanceCriteria: false };
+        return { plural: 'Tasks', singular: 'Task', parent: 'Story' };
     }
   };
 
-  const { plural: itemLabel, singular: itemLabelSingular, parent: parentLabel, hasAcceptanceCriteria } = getLabels();
+  const { plural: itemLabel, singular: itemLabelSingular, parent: parentLabel } = getLabels();
 
   const totalItems = frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
   const selectedCount = frameWorkItems.reduce(
@@ -171,11 +171,9 @@ export function ReviewScreen({
             {fwi.workItems.map((item) => (
               <WorkItemCard
                 key={item.id}
-                workItemId={item.id}
                 workItemType={workItemType}
                 title={item.title}
                 description={item.description}
-                acceptanceCriteria={item.acceptanceCriteria}
                 tags={selectedTags}
                 selected={item.selected}
                 onToggleSelect={() => onWorkItemToggle(fwi.frameId, item.id)}
@@ -184,12 +182,6 @@ export function ReviewScreen({
                 }
                 onDescriptionChange={(description) =>
                   onWorkItemUpdate(fwi.frameId, item.id, { description })
-                }
-                onAcceptanceCriteriaChange={
-                  hasAcceptanceCriteria
-                    ? (acceptanceCriteria) =>
-                        onWorkItemUpdate(fwi.frameId, item.id, { acceptanceCriteria })
-                    : undefined
                 }
                 onRemoveTag={(tag) => onRemoveTag(fwi.frameId, item.id, tag)}
               />

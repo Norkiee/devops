@@ -7,7 +7,6 @@ interface EpicToCreate {
   workItemId: string;
   title: string;
   description: string;
-  acceptanceCriteria?: string;
   tags: string[];
 }
 
@@ -81,7 +80,6 @@ export default async function handler(
             const azureEpic: AzureEpic = {
               title: epic.title,
               description: epic.description,
-              acceptanceCriteria: epic.acceptanceCriteria,
               tags: epic.tags,
               state: 'New',
               assignedTo: currentUser.emailAddress,

@@ -88,8 +88,7 @@ Output JSON:
   "epics": [
     {
       "title": "string - short phrase describing the design initiative",
-      "description": "string - what design work this covers and why it matters",
-      "acceptanceCriteria": "string - bullet points of design deliverables (mockups, specs, prototypes)"
+      "description": "string - what design work this covers and why it matters"
     }
   ]
 }`;
@@ -117,8 +116,7 @@ Output JSON:
   "features": [
     {
       "title": "string - specific design deliverable based on the frame",
-      "description": "string - what will be created and how it fits the design",
-      "acceptanceCriteria": "string - bullet points of what 'done' looks like"
+      "description": "string - what will be created and how it fits the design"
     }
   ]
 }`;
@@ -146,7 +144,6 @@ Task ideas based on frame content:
 - If frame has form fields → "Design validation states for [field names from text content]"
 - If frame has buttons → "Create hover and pressed states for [button text]"
 - If frame has nested sections → "Finalize layout for [nested frame names]"
-- If parent story has acceptance criteria → Create tasks that fulfill those criteria
 
 Write naturally, like a designer adding tasks to their sprint board.
 
@@ -180,7 +177,6 @@ IMPORTANT:
 
 Story format:
 - Title: Must follow the format "As a [user type], I want [what] so that [why]"
-- Acceptance Criteria: Specific deliverables and conditions for completion
 
 Example titles:
 - "As a designer, I want to finalize the Login Screen mockups so that development can begin"
@@ -191,8 +187,7 @@ Output JSON:
 {
   "stories": [
     {
-      "title": "string - As a [user], I want [what] so that [why]",
-      "acceptanceCriteria": "string - bullet points of deliverables"
+      "title": "string - As a [user], I want [what] so that [why]"
     }
   ]
 }`;
@@ -261,8 +256,6 @@ Feature Description: ${hierarchyContext.feature.description || 'Not provided'}
 
   const storySection = hierarchyContext?.userStory
     ? `User Story: ${hierarchyContext.userStory.title}
-Story Description: ${hierarchyContext.userStory.description || 'Not provided'}
-Acceptance Criteria: ${hierarchyContext.userStory.acceptanceCriteria || 'Not provided'}
 
 `
     : '';
@@ -360,19 +353,16 @@ interface ParsedTask {
 interface ParsedUserStory {
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
 }
 
 interface ParsedEpic {
   title: string;
   description: string;
-  acceptanceCriteria?: string;
 }
 
 interface ParsedFeature {
   title: string;
   description: string;
-  acceptanceCriteria?: string;
 }
 
 function parseTaskResponse(text: string): ParsedTask[] {
@@ -439,7 +429,6 @@ function parseUserStoryResponse(text: string): ParsedUserStory[] {
     return {
       title: s.title,
       description: typeof s.description === 'string' ? s.description : undefined,
-      acceptanceCriteria: typeof s.acceptanceCriteria === 'string' ? s.acceptanceCriteria : undefined,
     };
   });
 }
@@ -477,7 +466,6 @@ function parseEpicResponse(text: string): ParsedEpic[] {
     return {
       title: e.title,
       description: e.description,
-      acceptanceCriteria: typeof e.acceptanceCriteria === 'string' ? e.acceptanceCriteria : undefined,
     };
   });
 }
@@ -515,7 +503,6 @@ function parseFeatureResponse(text: string): ParsedFeature[] {
     return {
       title: f.title,
       description: f.description,
-      acceptanceCriteria: typeof f.acceptanceCriteria === 'string' ? f.acceptanceCriteria : undefined,
     };
   });
 }
@@ -601,7 +588,6 @@ export async function generateWorkItemsForFrame(
         id: `${frame.id}-${index + 1}`,
         title: epic.title,
         description: epic.description,
-        acceptanceCriteria: epic.acceptanceCriteria,
         selected: true,
       }));
       break;
@@ -612,7 +598,6 @@ export async function generateWorkItemsForFrame(
         id: `${frame.id}-${index + 1}`,
         title: feature.title,
         description: feature.description,
-        acceptanceCriteria: feature.acceptanceCriteria,
         selected: true,
       }));
       break;
@@ -623,7 +608,6 @@ export async function generateWorkItemsForFrame(
         id: `${frame.id}-${index + 1}`,
         title: story.title,
         // User Stories don't have description - title uses "As a user..." format
-        acceptanceCriteria: story.acceptanceCriteria,
         selected: true,
       }));
       break;

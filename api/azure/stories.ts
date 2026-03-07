@@ -90,7 +90,6 @@ export default async function handler(
           {
             title: story.title,
             description: story.description,
-            acceptanceCriteria: story.acceptanceCriteria,
             parentEpicId: story.parentEpicId,
             tags: story.tags,
             state: 'New',

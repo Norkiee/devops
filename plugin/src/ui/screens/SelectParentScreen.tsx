@@ -299,7 +299,6 @@ export function SelectParentScreen({
         id: featureDetails.id,
         title: featureDetails.title,
         description: featureDetails.description,
-        acceptanceCriteria: featureDetails.acceptanceCriteria,
       };
     }
 
@@ -308,7 +307,6 @@ export function SelectParentScreen({
         id: storyDetails.id,
         title: storyDetails.title,
         description: storyDetails.description,
-        acceptanceCriteria: storyDetails.acceptanceCriteria,
       };
     }
 

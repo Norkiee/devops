@@ -29,13 +29,11 @@ export interface HierarchyContext {
     id: number;
     title: string;
     description?: string;
-    acceptanceCriteria?: string;
   };
   userStory?: {
     id: number;
     title: string;
     description?: string;
-    acceptanceCriteria?: string;
   };
 }
 
@@ -60,7 +58,6 @@ export interface WorkItem {
   id: string;
   title: string;
   description?: string; // Optional - not used for User Stories
-  acceptanceCriteria?: string; // Only for Epics, Features, User Stories
   selected: boolean;
 }
 
@@ -114,7 +111,6 @@ export interface UserStoryToSubmit {
   workItemId: string;
   title: string;
   description?: string; // Not used - User Stories use "As a user..." title format
-  acceptanceCriteria?: string;
   tags: string[];
   parentEpicId: number;
 }
@@ -123,7 +119,6 @@ export interface EpicToSubmit {
   workItemId: string;
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
   tags: string[];
 }
 
@@ -131,7 +126,6 @@ export interface FeatureToSubmit {
   workItemId: string;
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
   parentEpicId?: number;
   tags: string[];
 }
@@ -165,7 +159,6 @@ export interface AzureWorkItemDetails {
   type: 'Epic' | 'Feature' | 'User Story' | 'Task';
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
   state: string;
   parentId?: number;
 }

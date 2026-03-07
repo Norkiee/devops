@@ -7,7 +7,6 @@ interface FeatureToCreate {
   workItemId: string;
   title: string;
   description: string;
-  acceptanceCriteria?: string;
   parentEpicId?: number;
   tags: string[];
 }
@@ -94,7 +93,6 @@ export default async function handler(
             const azureFeature: AzureFeature = {
               title: feature.title,
               description: feature.description,
-              acceptanceCriteria: feature.acceptanceCriteria,
               parentEpicId: feature.parentEpicId,
               tags: feature.tags,
               state: 'New',

@@ -227,7 +227,6 @@ export function App(): React.ReactElement {
             workItemId: item.id,
             title: item.title,
             description: item.description,
-            acceptanceCriteria: item.acceptanceCriteria,
             tags: selectedTags,
           }));
           submitResults = await createEpics(
@@ -244,7 +243,6 @@ export function App(): React.ReactElement {
             workItemId: item.id,
             title: item.title,
             description: item.description,
-            acceptanceCriteria: item.acceptanceCriteria,
             parentEpicId: hierarchyContext.epic?.id,
             tags: selectedTags,
           }));
@@ -266,7 +264,6 @@ export function App(): React.ReactElement {
             workItemId: item.id,
             title: item.title,
             description: item.description,
-            acceptanceCriteria: item.acceptanceCriteria,
             tags: selectedTags,
             parentEpicId: parentId,
           }));
@@ -350,7 +347,6 @@ export function App(): React.ReactElement {
             workItemId: item.id,
             title: item.title,
             description: item.description,
-            acceptanceCriteria: item.acceptanceCriteria,
             tags: selectedTags,
           }));
           retryResults = await createEpics(
@@ -366,7 +362,6 @@ export function App(): React.ReactElement {
             workItemId: item.id,
             title: item.title,
             description: item.description,
-            acceptanceCriteria: item.acceptanceCriteria,
             parentEpicId: hierarchyContext.epic?.id,
             tags: selectedTags,
           }));
@@ -384,7 +379,6 @@ export function App(): React.ReactElement {
             workItemId: item.id,
             title: item.title,
             description: item.description,
-            acceptanceCriteria: item.acceptanceCriteria,
             tags: selectedTags,
             parentEpicId: parentId!,
           }));

@@ -3,17 +3,14 @@ import { WorkItemType } from '../types';
 import { Tag } from './Tag';
 
 interface WorkItemCardProps {
-  workItemId: string;
   workItemType: WorkItemType;
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
   tags: string[];
   selected: boolean;
   onToggleSelect: () => void;
   onTitleChange: (title: string) => void;
   onDescriptionChange?: (description: string) => void;
-  onAcceptanceCriteriaChange?: (criteria: string) => void;
   onRemoveTag: (tag: string) => void;
 }
 
@@ -82,12 +79,6 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     boxSizing: 'border-box' as const,
   },
-  fieldLabel: {
-    fontSize: '11px',
-    fontWeight: 500,
-    color: '#666666',
-    marginBottom: '2px',
-  },
   tagsRow: {
     display: 'flex',
     flexWrap: 'wrap' as const,
@@ -102,34 +93,31 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export function WorkItemCard({
-  workItemId,
   workItemType,
   title,
   description,
-  acceptanceCriteria,
   tags,
   selected,
   onToggleSelect,
   onTitleChange,
   onDescriptionChange,
-  onAcceptanceCriteriaChange,
   onRemoveTag,
 }: WorkItemCardProps): React.ReactElement {
-  const getLabels = (): { itemLabel: string; titlePlaceholder: string; hasDescription: boolean; hasAcceptanceCriteria: boolean } => {
+  const getLabels = (): { itemLabel: string; titlePlaceholder: string; hasDescription: boolean } => {
     switch (workItemType) {
       case 'Epic':
-        return { itemLabel: 'epic', titlePlaceholder: 'Epic title...', hasDescription: true, hasAcceptanceCriteria: true };
+        return { itemLabel: 'epic', titlePlaceholder: 'Epic title...', hasDescription: true };
       case 'Feature':
-        return { itemLabel: 'feature', titlePlaceholder: 'Feature title...', hasDescription: true, hasAcceptanceCriteria: true };
+        return { itemLabel: 'feature', titlePlaceholder: 'Feature title...', hasDescription: true };
       case 'UserStory':
-        return { itemLabel: 'story', titlePlaceholder: 'As a user, I want... so that...', hasDescription: false, hasAcceptanceCriteria: true };
+        return { itemLabel: 'story', titlePlaceholder: 'As a user, I want... so that...', hasDescription: false };
       case 'Task':
       default:
-        return { itemLabel: 'task', titlePlaceholder: 'Task title...', hasDescription: true, hasAcceptanceCriteria: false };
+        return { itemLabel: 'task', titlePlaceholder: 'Task title...', hasDescription: true };
     }
   };
 
-  const { itemLabel, titlePlaceholder, hasDescription, hasAcceptanceCriteria } = getLabels();
+  const { itemLabel, titlePlaceholder, hasDescription } = getLabels();
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize title textarea
@@ -169,18 +157,6 @@ export function WorkItemCard({
                   style={styles.textarea}
                   placeholder="Description..."
                 />
-              )}
-              {hasAcceptanceCriteria && onAcceptanceCriteriaChange && (
-                <div>
-                  <label style={styles.fieldLabel}>Acceptance Criteria</label>
-                  <textarea
-                    value={acceptanceCriteria || ''}
-                    onChange={(e) => onAcceptanceCriteriaChange(e.target.value)}
-                    rows={4}
-                    style={styles.textarea}
-                    placeholder="- Criteria 1&#10;- Criteria 2&#10;- Criteria 3"
-                  />
-                </div>
               )}
               {tags.length > 0 && (
                 <div style={styles.tagsRow}>

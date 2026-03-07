@@ -380,7 +380,6 @@ export async function getWorkItemDetails(
     type: data.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story' | 'Task',
     title: data.fields['System.Title'],
     description: data.fields['System.Description'],
-    acceptanceCriteria: data.fields['Microsoft.VSTS.Common.AcceptanceCriteria'],
     state: data.fields['System.State'],
     parentId,
   };
@@ -415,15 +414,6 @@ export async function createUserStory(
       op: 'add',
       path: '/fields/System.Description',
       value: story.description,
-    });
-  }
-
-  // Add acceptance criteria if provided
-  if (story.acceptanceCriteria) {
-    patchDoc.push({
-      op: 'add',
-      path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
-      value: story.acceptanceCriteria,
     });
   }
 
@@ -600,15 +590,6 @@ export async function createEpic(
     { op: 'add', path: '/fields/System.Tags', value: epic.tags.join('; ') },
   ];
 
-  // Add acceptance criteria if provided
-  if (epic.acceptanceCriteria) {
-    patchDoc.push({
-      op: 'add',
-      path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
-      value: epic.acceptanceCriteria,
-    });
-  }
-
   // Add assigned user if provided
   if (epic.assignedTo) {
     patchDoc.push({
@@ -656,15 +637,6 @@ export async function createFeature(
         rel: 'System.LinkTypes.Hierarchy-Reverse',
         url: `https://dev.azure.com/${opts.org}/_apis/wit/workItems/${feature.parentEpicId}`,
       },
-    });
-  }
-
-  // Add acceptance criteria if provided
-  if (feature.acceptanceCriteria) {
-    patchDoc.push({
-      op: 'add',
-      path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
-      value: feature.acceptanceCriteria,
     });
   }
 

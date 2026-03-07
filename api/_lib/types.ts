@@ -27,13 +27,11 @@ export interface HierarchyContext {
     id: number;
     title: string;
     description?: string;
-    acceptanceCriteria?: string;
   };
   userStory?: {
     id: number;
     title: string;
     description?: string;
-    acceptanceCriteria?: string;
   };
 }
 
@@ -96,7 +94,6 @@ export interface WorkItem {
   id: string;
   title: string;
   description?: string; // Optional - not used for User Stories
-  acceptanceCriteria?: string; // Only for Epics, Features, User Stories
   selected: boolean;
 }
 
@@ -132,7 +129,6 @@ export interface AzureTask {
 export interface AzureUserStory {
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
   parentEpicId: number;
   tags: string[];
   state: 'New';
@@ -142,7 +138,6 @@ export interface AzureUserStory {
 export interface AzureEpic {
   title: string;
   description: string;
-  acceptanceCriteria?: string;
   tags: string[];
   state: 'New';
   assignedTo?: string;
@@ -151,7 +146,6 @@ export interface AzureEpic {
 export interface AzureFeature {
   title: string;
   description: string;
-  acceptanceCriteria?: string;
   parentEpicId?: number;
   tags: string[];
   state: 'New';
@@ -161,8 +155,7 @@ export interface AzureFeature {
 export interface UserStoryToCreate {
   workItemId: string;
   title: string;
-  description: string;
-  acceptanceCriteria?: string;
+  description?: string;
   parentEpicId: number;
   tags: string[];
 }
@@ -180,7 +173,6 @@ export interface AzureWorkItemDetails {
   type: 'Epic' | 'Feature' | 'User Story' | 'Task';
   title: string;
   description?: string;
-  acceptanceCriteria?: string;
   state: string;
   parentId?: number;
 }
