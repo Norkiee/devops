@@ -1,12 +1,11 @@
 import React from 'react';
-import { WorkItemType, WorkItemTypeInfo, isStoryLikeType } from '../types';
+import { WorkItemType } from '../types';
 import { Button } from '../components/Button';
 
 interface WorkItemTypeScreenProps {
   frameCount: number;
   sectionCount: number;
   savedWorkItemType?: WorkItemType;
-  availableTypes?: WorkItemTypeInfo[];
   onSelect: (type: WorkItemType) => void;
   onBack: () => void;
 }
@@ -156,7 +155,6 @@ export function WorkItemTypeScreen({
   frameCount,
   sectionCount,
   savedWorkItemType,
-  availableTypes,
   onSelect,
   onBack,
 }: WorkItemTypeScreenProps): React.ReactElement {
@@ -168,18 +166,6 @@ export function WorkItemTypeScreen({
     ? `${sectionCount} section${sectionCount > 1 ? 's' : ''} (${frameCount} frame${frameCount > 1 ? 's' : ''})`
     : `${frameCount} frame${frameCount > 1 ? 's' : ''}`;
 
-  // Filter type configs based on available types from Azure DevOps
-  // Show all types by default when project not yet selected (availableTypes empty)
-  const visibleTypes = availableTypes && availableTypes.length > 0
-    ? typeConfigs.filter((config) => {
-        if (config.type === 'UserStory') {
-          // Match any story-like type (User Story, Product Backlog Item, Requirement, Issue)
-          return availableTypes.some((at) => isStoryLikeType(at.name));
-        }
-        return availableTypes.some((at) => at.name === config.azureName);
-      })
-    : typeConfigs;
-
   return (
     <div className="screen">
       <div className="screen-header">
@@ -190,7 +176,7 @@ export function WorkItemTypeScreen({
       <div style={styles.badge}>{frameLabel} ready</div>
 
       <div style={styles.cardsContainer as React.CSSProperties}>
-        {visibleTypes.map((config) => (
+        {typeConfigs.map((config) => (
           <div
             key={config.type}
             style={{

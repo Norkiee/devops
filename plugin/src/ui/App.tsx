@@ -499,7 +499,6 @@ export function App(): React.ReactElement {
           frameCount={frameCount}
           sectionCount={sectionCount}
           savedWorkItemType={storage.lastWorkItemType}
-          availableTypes={availableTypes}
           onSelect={handleSelectWorkItemType}
           onBack={() => setScreen('home')}
         />
