@@ -53,9 +53,10 @@ export default async function handler(
 
   // POST: Create user stories
   if (req.method === 'POST') {
-    const { projectId, stories } = req.body as {
+    const { projectId, stories, workItemTypeName } = req.body as {
       projectId?: string;
       stories?: UserStoryToCreate[];
+      workItemTypeName?: string; // "User Story" or "Product Backlog Item" etc.
     };
 
     if (!projectId || typeof projectId !== 'string') {
@@ -84,6 +85,7 @@ export default async function handler(
             org: auth.org,
             accessToken: auth.accessToken,
             projectId,
+            workItemTypeName,
           },
           {
             title: story.title,

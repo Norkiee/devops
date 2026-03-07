@@ -269,11 +269,16 @@ export function App(): React.ReactElement {
             tags: selectedTags,
             parentEpicId: parentId,
           }));
+          // Find the correct work item type name (User Story, Product Backlog Item, etc.)
+          const storyTypeName = availableTypes.find(
+            (t) => t.name === 'User Story' || t.name === 'Product Backlog Item' || t.name === 'Requirement' || t.name === 'Issue'
+          )?.name;
           submitResults = await createUserStories(
             auth.accessToken!,
             azureOrg,
             azureProjectId,
-            stories
+            stories,
+            storyTypeName
           );
           break;
         }
@@ -384,11 +389,16 @@ export function App(): React.ReactElement {
             tags: selectedTags,
             parentEpicId: parentId!,
           }));
+          // Find the correct work item type name
+          const storyTypeName = availableTypes.find(
+            (t) => t.name === 'User Story' || t.name === 'Product Backlog Item' || t.name === 'Requirement' || t.name === 'Issue'
+          )?.name;
           retryResults = await createUserStories(
             auth.accessToken!,
             azureOrg,
             azureProjectId,
-            stories
+            stories,
+            storyTypeName
           );
           break;
         }

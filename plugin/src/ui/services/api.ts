@@ -246,7 +246,8 @@ export async function createUserStories(
   accessToken: string,
   org: string,
   projectId: string,
-  stories: UserStoryToSubmit[]
+  stories: UserStoryToSubmit[],
+  workItemTypeName?: string
 ): Promise<CreateUserStoryResult[]> {
   const data = await request<{ results: CreateUserStoryResult[] }>(
     `/api/azure/stories?org=${encodeURIComponent(org)}`,
@@ -255,6 +256,7 @@ export async function createUserStories(
       headers: authHeaders(accessToken),
       body: JSON.stringify({
         projectId,
+        workItemTypeName,
         stories: stories.map((s) => ({
           workItemId: s.workItemId,
           title: s.title,

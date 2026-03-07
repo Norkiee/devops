@@ -385,9 +385,11 @@ export async function getWorkItemDetails(
 }
 
 export async function createUserStory(
-  opts: AzureApiOptions & { projectId: string },
+  opts: AzureApiOptions & { projectId: string; workItemTypeName?: string },
   story: AzureUserStory
 ): Promise<{ id: number; url: string }> {
+  // Use provided type name or default to "User Story"
+  const typeName = opts.workItemTypeName || 'User Story';
   const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: story.title },
     {
@@ -429,7 +431,7 @@ export async function createUserStory(
   }
 
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$User%20Story?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$${encodeURIComponent(typeName)}?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'POST',
