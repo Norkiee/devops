@@ -312,7 +312,7 @@ export async function queryStoriesByEpic(
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
   const wiqlData = (await wiqlResponse.json()) as {
-    workItemRelations?: Array<{ target?: { id: number } }>;
+    workItemRelations?: Array<{ source?: { id: number } | null; target?: { id: number } }>;
   };
 
   if (!wiqlData.workItemRelations || wiqlData.workItemRelations.length === 0) {
@@ -320,8 +320,9 @@ export async function queryStoriesByEpic(
   }
 
   // Extract target IDs (the User Stories)
+  // Filter out entries where source is null (that's the source work item itself, not a link)
   const ids = wiqlData.workItemRelations
-    .filter((rel) => rel.target?.id)
+    .filter((rel) => rel.source && rel.target?.id)
     .map((rel) => rel.target!.id)
     .slice(0, 50);
 
@@ -562,15 +563,16 @@ export async function queryFeaturesByEpic(
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
   const wiqlData = (await wiqlResponse.json()) as {
-    workItemRelations?: Array<{ target?: { id: number } }>;
+    workItemRelations?: Array<{ source?: { id: number } | null; target?: { id: number } }>;
   };
 
   if (!wiqlData.workItemRelations || wiqlData.workItemRelations.length === 0) {
     return [];
   }
 
+  // Filter out entries where source is null (that's the source work item itself, not a link)
   const ids = wiqlData.workItemRelations
-    .filter((rel) => rel.target?.id)
+    .filter((rel) => rel.source && rel.target?.id)
     .map((rel) => rel.target!.id)
     .slice(0, 50);
 
