@@ -1,6 +1,21 @@
 // Work item types that can be generated
 export type WorkItemType = 'Epic' | 'Feature' | 'UserStory' | 'Task';
 
+// Story-like work item types across Azure DevOps process templates
+// Agile: User Story, Scrum: Product Backlog Item, CMMI: Requirement, Basic: Issue
+export const STORY_LIKE_TYPES = ['User Story', 'Product Backlog Item', 'Requirement', 'Issue'] as const;
+export type StoryLikeType = typeof STORY_LIKE_TYPES[number];
+
+// WorkItemLinks API response structure
+export interface WorkItemRelation {
+  source?: { id: number } | null;
+  target?: { id: number };
+}
+
+export interface WorkItemRelationsResponse {
+  workItemRelations?: WorkItemRelation[];
+}
+
 // Hierarchy context for AI generation
 export interface HierarchyContext {
   epic?: {

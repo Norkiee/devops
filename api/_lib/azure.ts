@@ -1,4 +1,4 @@
-import { AzureProject, AzureStory, AzureTask, AzureUserStory, AzureWorkItemDetails, AzureEpic, AzureFeature } from './types';
+import { AzureProject, AzureStory, AzureTask, AzureUserStory, AzureWorkItemDetails, AzureEpic, AzureFeature, STORY_LIKE_TYPES, WorkItemRelationsResponse } from './types';
 
 const AZURE_API_VERSION = '7.1';
 const FETCH_TIMEOUT_MS = 30000; // 30 second timeout
@@ -6,6 +6,17 @@ const FETCH_TIMEOUT_MS = 30000; // 30 second timeout
 interface AzureApiOptions {
   org: string;
   accessToken: string;
+}
+
+// Extract target IDs from WorkItemLinks response, filtering out the source entry
+function extractTargetIds(response: WorkItemRelationsResponse, limit = 50): number[] {
+  if (!response.workItemRelations || response.workItemRelations.length === 0) {
+    return [];
+  }
+  return response.workItemRelations
+    .filter((rel) => rel.source && rel.target?.id)
+    .map((rel) => rel.target!.id)
+    .slice(0, limit);
 }
 
 // Custom error class for Azure auth failures
@@ -138,10 +149,11 @@ export async function queryStories(
   opts: AzureApiOptions & { projectId: string }
 ): Promise<AzureStory[]> {
   // Query for story-like work items (not Epics or Features)
+  const storyTypesClause = STORY_LIKE_TYPES.map(t => `'${t}'`).join(', ');
   const wiqlQuery = {
     query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
             FROM WorkItems
-            WHERE [System.WorkItemType] IN ('User Story', 'Product Backlog Item', 'Requirement', 'Issue')
+            WHERE [System.WorkItemType] IN (${storyTypesClause})
             AND [System.State] <> 'Closed'
             AND [System.State] <> 'Removed'
             ORDER BY [System.ChangedDate] DESC`,
@@ -293,14 +305,13 @@ export async function queryEpics(
 export async function queryStoriesByEpic(
   opts: AzureApiOptions & { projectId: string; epicId: number }
 ): Promise<AzureStory[]> {
-  // Use WorkItemLinks to find story-like items linked to the Epic
-  // Supports all process templates: User Story (Agile), Product Backlog Item (Scrum), Requirement (CMMI), Issue (Basic)
+  const storyTypesClause = STORY_LIKE_TYPES.map(t => `'${t}'`).join(', ');
   const wiqlQuery = {
     query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
             FROM WorkItemLinks
             WHERE ([Source].[System.Id] = ${opts.epicId})
             AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward')
-            AND ([Target].[System.WorkItemType] IN ('User Story', 'Product Backlog Item', 'Requirement', 'Issue'))
+            AND ([Target].[System.WorkItemType] IN (${storyTypesClause}))
             AND ([Target].[System.State] <> 'Closed')
             AND ([Target].[System.State] <> 'Removed')
             MODE (MustContain)`,
@@ -311,20 +322,8 @@ export async function queryStoriesByEpic(
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
-  const wiqlData = (await wiqlResponse.json()) as {
-    workItemRelations?: Array<{ source?: { id: number } | null; target?: { id: number } }>;
-  };
-
-  if (!wiqlData.workItemRelations || wiqlData.workItemRelations.length === 0) {
-    return [];
-  }
-
-  // Extract target IDs (the User Stories)
-  // Filter out entries where source is null (that's the source work item itself, not a link)
-  const ids = wiqlData.workItemRelations
-    .filter((rel) => rel.source && rel.target?.id)
-    .map((rel) => rel.target!.id)
-    .slice(0, 50);
+  const wiqlData = (await wiqlResponse.json()) as WorkItemRelationsResponse;
+  const ids = extractTargetIds(wiqlData);
 
   if (ids.length === 0) {
     return [];
@@ -562,19 +561,8 @@ export async function queryFeaturesByEpic(
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
-  const wiqlData = (await wiqlResponse.json()) as {
-    workItemRelations?: Array<{ source?: { id: number } | null; target?: { id: number } }>;
-  };
-
-  if (!wiqlData.workItemRelations || wiqlData.workItemRelations.length === 0) {
-    return [];
-  }
-
-  // Filter out entries where source is null (that's the source work item itself, not a link)
-  const ids = wiqlData.workItemRelations
-    .filter((rel) => rel.source && rel.target?.id)
-    .map((rel) => rel.target!.id)
-    .slice(0, 50);
+  const wiqlData = (await wiqlResponse.json()) as WorkItemRelationsResponse;
+  const ids = extractTargetIds(wiqlData);
 
   if (ids.length === 0) {
     return [];

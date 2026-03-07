@@ -1,6 +1,15 @@
 // Work item types that can be generated
 export type WorkItemType = 'Epic' | 'Feature' | 'UserStory' | 'Task';
 
+// Story-like work item types across Azure DevOps process templates
+export const STORY_LIKE_TYPES = ['User Story', 'Product Backlog Item', 'Requirement', 'Issue'] as const;
+export type StoryLikeType = typeof STORY_LIKE_TYPES[number];
+
+// Check if a work item type name is a story-like type
+export function isStoryLikeType(name: string): boolean {
+  return (STORY_LIKE_TYPES as readonly string[]).includes(name);
+}
+
 // Work item type info from Azure DevOps
 export interface WorkItemTypeInfo {
   name: string;

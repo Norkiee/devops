@@ -15,6 +15,7 @@ import {
   CreateUserStoryResult,
   CreateEpicResult,
   CreateFeatureResult,
+  isStoryLikeType,
 } from './types';
 import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
@@ -270,9 +271,7 @@ export function App(): React.ReactElement {
             parentEpicId: parentId,
           }));
           // Find the correct work item type name (User Story, Product Backlog Item, etc.)
-          const storyTypeName = availableTypes.find(
-            (t) => t.name === 'User Story' || t.name === 'Product Backlog Item' || t.name === 'Requirement' || t.name === 'Issue'
-          )?.name;
+          const storyTypeName = availableTypes.find((t) => isStoryLikeType(t.name))?.name;
           submitResults = await createUserStories(
             auth.accessToken!,
             azureOrg,
@@ -390,9 +389,7 @@ export function App(): React.ReactElement {
             parentEpicId: parentId!,
           }));
           // Find the correct work item type name
-          const storyTypeName = availableTypes.find(
-            (t) => t.name === 'User Story' || t.name === 'Product Backlog Item' || t.name === 'Requirement' || t.name === 'Issue'
-          )?.name;
+          const storyTypeName = availableTypes.find((t) => isStoryLikeType(t.name))?.name;
           retryResults = await createUserStories(
             auth.accessToken!,
             azureOrg,
