@@ -1,4 +1,4 @@
-# Sync — Figma to Azure DevOps Plugin
+# TaskScribe — Figma to Azure DevOps Plugin
 
 Figma plugin that converts design frames into Azure DevOps work items (Epics, Features, User Stories, Tasks) using Claude AI.
 

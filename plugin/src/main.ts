@@ -133,12 +133,12 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
   }
 
   if (msg.type === 'get-storage') {
-    const data = await figma.clientStorage.getAsync('devops-sync');
+    const data = await figma.clientStorage.getAsync('taskscribe');
     figma.ui.postMessage({ type: 'storage', data: data || {} });
   }
 
   if (msg.type === 'set-storage') {
-    await figma.clientStorage.setAsync('devops-sync', msg.data);
+    await figma.clientStorage.setAsync('taskscribe', msg.data);
   }
 
   if (msg.type === 'resize') {
