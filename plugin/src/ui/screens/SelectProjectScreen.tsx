@@ -81,7 +81,10 @@ export function SelectProjectScreen({
   // Determine what work item types are available
   const hasEpics = useMemo(() => availableTypes.some((t) => t.name === 'Epic'), [availableTypes]);
   const hasFeatures = useMemo(() => availableTypes.some((t) => t.name === 'Feature'), [availableTypes]);
-  const hasUserStories = useMemo(() => availableTypes.some((t) => t.name === 'User Story'), [availableTypes]);
+  // Check for story-like types (User Story, Product Backlog Item, Requirement, Issue)
+  const hasUserStories = useMemo(() => availableTypes.some((t) =>
+    t.name === 'User Story' || t.name === 'Product Backlog Item' || t.name === 'Requirement' || t.name === 'Issue'
+  ), [availableTypes]);
 
   // Helper to handle auth errors with refresh attempt
   // Returns true if refresh succeeded and caller should retry
