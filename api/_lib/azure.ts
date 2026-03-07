@@ -419,6 +419,15 @@ export async function createUserStory(
     });
   }
 
+  // Add assigned user if provided
+  if (story.assignedTo) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.AssignedTo',
+      value: story.assignedTo,
+    });
+  }
+
   const response = await azureFetch(
     `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$User%20Story?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
@@ -602,6 +611,15 @@ export async function createEpic(
     });
   }
 
+  // Add assigned user if provided
+  if (epic.assignedTo) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.AssignedTo',
+      value: epic.assignedTo,
+    });
+  }
+
   const response = await azureFetch(
     `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Epic?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
@@ -649,6 +667,15 @@ export async function createFeature(
       op: 'add',
       path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria',
       value: feature.acceptanceCriteria,
+    });
+  }
+
+  // Add assigned user if provided
+  if (feature.assignedTo) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.AssignedTo',
+      value: feature.assignedTo,
     });
   }
 

@@ -121,6 +121,7 @@ export interface AzureUserStory {
   parentEpicId: number;
   tags: string[];
   state: 'New';
+  assignedTo?: string;
 }
 
 export interface AzureEpic {
@@ -129,6 +130,7 @@ export interface AzureEpic {
   acceptanceCriteria?: string;
   tags: string[];
   state: 'New';
+  assignedTo?: string;
 }
 
 export interface AzureFeature {
@@ -138,6 +140,7 @@ export interface AzureFeature {
   parentEpicId?: number;
   tags: string[];
   state: 'New';
+  assignedTo?: string;
 }
 
 export interface UserStoryToCreate {

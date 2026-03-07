@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryStories, queryStoriesByEpic, createUserStory } from '../_lib/azure';
+import { queryStories, queryStoriesByEpic, createUserStory, getCurrentUser } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 import { UserStoryToCreate, CreateUserStoryResult } from '../_lib/types';
 
@@ -68,6 +68,15 @@ export default async function handler(
       return;
     }
 
+    // Get current user to auto-assign stories
+    let currentUserEmail: string | undefined;
+    try {
+      const currentUser = await getCurrentUser(auth.accessToken);
+      currentUserEmail = currentUser.emailAddress;
+    } catch {
+      // Continue without auto-assignment if we can't get current user
+    }
+
     const createPromises = stories.map(async (story): Promise<CreateUserStoryResult> => {
       try {
         const result = await createUserStory(
@@ -83,6 +92,7 @@ export default async function handler(
             parentEpicId: story.parentEpicId,
             tags: story.tags,
             state: 'New',
+            assignedTo: currentUserEmail,
           }
         );
         return {

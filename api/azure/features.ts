@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryFeatures, queryFeaturesByEpic, createFeature } from '../_lib/azure';
+import { queryFeatures, queryFeaturesByEpic, createFeature, getCurrentUser } from '../_lib/azure';
 import { AzureFeature } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -85,6 +85,9 @@ export default async function handler(
     }
 
     try {
+      // Get current user to auto-assign features
+      const currentUser = await getCurrentUser(auth.accessToken);
+
       const results: CreateFeatureResult[] = await Promise.all(
         features.map(async (feature): Promise<CreateFeatureResult> => {
           try {
@@ -95,6 +98,7 @@ export default async function handler(
               parentEpicId: feature.parentEpicId,
               tags: feature.tags,
               state: 'New',
+              assignedTo: currentUser.emailAddress,
             };
 
             const result = await createFeature(

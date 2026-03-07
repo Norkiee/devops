@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryEpics, createEpic } from '../_lib/azure';
+import { queryEpics, createEpic, getCurrentUser } from '../_lib/azure';
 import { AzureEpic } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -72,6 +72,9 @@ export default async function handler(
     }
 
     try {
+      // Get current user to auto-assign epics
+      const currentUser = await getCurrentUser(auth.accessToken);
+
       const results: CreateEpicResult[] = await Promise.all(
         epics.map(async (epic): Promise<CreateEpicResult> => {
           try {
@@ -81,6 +84,7 @@ export default async function handler(
               acceptanceCriteria: epic.acceptanceCriteria,
               tags: epic.tags,
               state: 'New',
+              assignedTo: currentUser.emailAddress,
             };
 
             const result = await createEpic(
