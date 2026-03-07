@@ -25,7 +25,6 @@ import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
 import { WorkItemTypeScreen } from './screens/WorkItemTypeScreen';
-import { SelectParentScreen } from './screens/SelectParentScreen';
 import { ContextScreen } from './screens/ContextScreen';
 import { GeneratingScreen } from './screens/GeneratingScreen';
 import { ReviewScreen } from './screens/ReviewScreen';
@@ -80,33 +79,37 @@ export function App(): React.ReactElement {
     });
   }, [auth]);
 
-  // Called after selecting org/project to go to parent selection (or context for Epics)
+  // Called after selecting org/project and parent (combined screen)
   const handleProjectSelected = useCallback(
     (selection: {
       org: string;
       projectId: string;
       availableTypes: WorkItemTypeInfo[];
+      hierarchyContext: HierarchyContext;
+      selectedTags: string[];
+      parentTitle: string;
     }) => {
       setAzureOrg(selection.org);
       setAzureProjectId(selection.projectId);
       setAvailableTypes(selection.availableTypes);
+      setHierarchyContext(selection.hierarchyContext);
+      setSelectedTags(selection.selectedTags);
+      setParentTitle(selection.parentTitle);
 
       // Save to storage
       updateStorage({
         azureOrg: selection.org,
         azureProjectId: selection.projectId,
+        lastEpicId: selection.hierarchyContext.epic?.id,
+        lastFeatureId: selection.hierarchyContext.feature?.id,
+        lastStoryId: selection.hierarchyContext.userStory?.id,
+        frequentTags: selection.selectedTags.slice(0, 5),
       });
 
-      // For Epics, no parent needed - go straight to context
-      if (workItemType === 'Epic') {
-        setHierarchyContext({});
-        setParentTitle('');
-        setScreen('context');
-      } else {
-        setScreen('select-parent');
-      }
+      // Go straight to context screen
+      setScreen('context');
     },
-    [updateStorage, workItemType]
+    [updateStorage]
   );
 
   const handleSelectWorkItemType = useCallback((type: WorkItemType) => {
@@ -125,29 +128,6 @@ export function App(): React.ReactElement {
     auth.logout();
     setScreen('connect-azure');
   }, [auth]);
-
-  const handleParentSelected = useCallback(
-    (selection: {
-      hierarchyContext: HierarchyContext;
-      selectedTags: string[];
-      parentTitle: string;
-    }) => {
-      setHierarchyContext(selection.hierarchyContext);
-      setSelectedTags(selection.selectedTags);
-      setParentTitle(selection.parentTitle);
-
-      // Save to storage
-      updateStorage({
-        lastEpicId: selection.hierarchyContext.epic?.id,
-        lastFeatureId: selection.hierarchyContext.feature?.id,
-        lastStoryId: selection.hierarchyContext.userStory?.id,
-        frequentTags: selection.selectedTags.slice(0, 5),
-      });
-
-      setScreen('context');
-    },
-    [updateStorage]
-  );
 
   const handleGenerate = useCallback(
     async (context?: string) => {
@@ -537,27 +517,14 @@ export function App(): React.ReactElement {
       {screen === 'select-project' && (
         <SelectProjectScreen
           accessToken={auth.accessToken!}
+          workItemType={workItemType}
           savedOrg={storage.azureOrg}
           savedProjectId={storage.azureProjectId}
-          onContinue={handleProjectSelected}
-          onSessionExpired={handleSessionExpired}
-          onRefreshToken={auth.refresh}
-          onBack={() => setScreen('work-item-type')}
-        />
-      )}
-
-      {screen === 'select-parent' && (
-        <SelectParentScreen
-          accessToken={auth.accessToken!}
-          workItemType={workItemType}
-          org={azureOrg}
-          projectId={azureProjectId}
           savedEpicId={storage.lastEpicId}
           savedFeatureId={storage.lastFeatureId}
           savedStoryId={storage.lastStoryId}
           savedFrequentTags={storage.frequentTags}
-          availableTypes={availableTypes}
-          onContinue={handleParentSelected}
+          onContinue={handleProjectSelected}
           onSessionExpired={handleSessionExpired}
           onRefreshToken={auth.refresh}
           onBack={() => setScreen('work-item-type')}
@@ -570,7 +537,7 @@ export function App(): React.ReactElement {
           workItemType={workItemType}
           parentTitle={parentTitle}
           onGenerate={handleGenerate}
-          onBack={() => setScreen(workItemType === 'Epic' ? 'select-project' : 'select-parent')}
+          onBack={() => setScreen('select-project')}
         />
       )}
 

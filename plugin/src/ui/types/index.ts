@@ -180,7 +180,6 @@ export type Screen =
   | 'connect-azure'
   | 'select-project'
   | 'work-item-type'
-  | 'select-parent'
   | 'context'
   | 'generating'
   | 'review'

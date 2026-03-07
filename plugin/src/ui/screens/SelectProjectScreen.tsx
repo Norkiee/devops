@@ -1,22 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { AzureProject, WorkItemTypeInfo } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AzureProject, WorkItemTypeInfo, WorkItemType, AzureStory, HierarchyContext, AzureWorkItemDetails } from '../types';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
+import { Tag } from '../components/Tag';
 import {
   fetchOrgs,
   fetchProjects,
   fetchWorkItemTypes,
+  fetchEpics,
+  fetchFeaturesByEpic,
+  fetchStoriesByEpic,
+  fetchWorkItemDetails,
+  fetchTags,
   AuthError,
 } from '../services/api';
 
 interface SelectProjectScreenProps {
   accessToken: string;
+  workItemType: WorkItemType;
   savedOrg?: string;
   savedProjectId?: string;
+  savedEpicId?: number;
+  savedFeatureId?: number;
+  savedStoryId?: number;
+  savedFrequentTags?: string[];
   onContinue: (selection: {
     org: string;
     projectId: string;
     availableTypes: WorkItemTypeInfo[];
+    hierarchyContext: HierarchyContext;
+    selectedTags: string[];
+    parentTitle: string;
   }) => void;
   onSessionExpired: () => void;
   onRefreshToken: () => Promise<void>;
@@ -25,21 +39,48 @@ interface SelectProjectScreenProps {
 
 export function SelectProjectScreen({
   accessToken,
+  workItemType,
   savedOrg,
   savedProjectId,
+  savedEpicId,
+  savedFeatureId,
+  savedStoryId,
+  savedFrequentTags,
   onContinue,
   onSessionExpired,
   onRefreshToken,
   onBack,
 }: SelectProjectScreenProps): React.ReactElement {
+  // Organization and project state
   const [orgs, setOrgs] = useState<string[]>([]);
   const [org, setOrg] = useState(savedOrg || '');
   const [projects, setProjects] = useState<AzureProject[]>([]);
   const [projectId, setProjectId] = useState(savedProjectId || '');
   const [availableTypes, setAvailableTypes] = useState<WorkItemTypeInfo[]>([]);
+
+  // Parent work item state
+  const [epics, setEpics] = useState<AzureStory[]>([]);
+  const [epicId, setEpicId] = useState(savedEpicId?.toString() || '');
+  const [epicDetails, setEpicDetails] = useState<AzureWorkItemDetails | null>(null);
+  const [features, setFeatures] = useState<AzureStory[]>([]);
+  const [featureId, setFeatureId] = useState(savedFeatureId?.toString() || '');
+  const [featureDetails, setFeatureDetails] = useState<AzureWorkItemDetails | null>(null);
+  const [stories, setStories] = useState<AzureStory[]>([]);
+  const [storyId, setStoryId] = useState(savedStoryId?.toString() || '');
+  const [storyDetails, setStoryDetails] = useState<AzureWorkItemDetails | null>(null);
+
+  // Tags state
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(savedFrequentTags || []);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Determine what work item types are available
+  const hasEpics = useMemo(() => availableTypes.some((t) => t.name === 'Epic'), [availableTypes]);
+  const hasFeatures = useMemo(() => availableTypes.some((t) => t.name === 'Feature'), [availableTypes]);
+  const hasUserStories = useMemo(() => availableTypes.some((t) => t.name === 'User Story'), [availableTypes]);
 
   // Helper to handle auth errors with refresh attempt
   // Returns true if refresh succeeded and caller should retry
@@ -183,21 +224,258 @@ export function SelectProjectScreen({
     return () => { isCancelled = true; };
   }, [accessToken, org, projectId]);
 
-  const canContinue = org && projectId && availableTypes.length > 0;
+  // Fetch epics and tags when project is selected (for non-Epic work item types)
+  useEffect(() => {
+    if (!org || !projectId || workItemType === 'Epic') return;
+    let isCancelled = false;
+
+    const loadEpicsAndTags = async () => {
+      setEpics([]);
+      setEpicId('');
+      setEpicDetails(null);
+      setFeatures([]);
+      setFeatureId('');
+      setFeatureDetails(null);
+      setStories([]);
+      setStoryId('');
+      setStoryDetails(null);
+      setLoading(true);
+      try {
+        const [fetchedEpics, fetchedTags] = await Promise.all([
+          fetchEpics(accessToken, org, projectId),
+          fetchTags(accessToken, org, projectId),
+        ]);
+        if (isCancelled) return;
+        setEpics(fetchedEpics);
+        setAvailableTags(fetchedTags);
+
+        // Auto-select saved epic if available
+        if (savedEpicId && fetchedEpics.some(e => e.id === savedEpicId)) {
+          setEpicId(savedEpicId.toString());
+        }
+      } catch (err) {
+        if (isCancelled) return;
+        if (isLikelyAuthError(err)) {
+          await handleAuthError();
+        }
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadEpicsAndTags();
+    return () => { isCancelled = true; };
+  }, [accessToken, org, projectId, workItemType, savedEpicId]);
+
+  // Fetch epic details and children when epic changes
+  useEffect(() => {
+    if (!epicId || !org || !projectId) return;
+    let isCancelled = false;
+
+    const loadEpicDetailsAndChildren = async () => {
+      setEpicDetails(null);
+      setFeatures([]);
+      setFeatureId('');
+      setFeatureDetails(null);
+      setStories([]);
+      setStoryId('');
+      setStoryDetails(null);
+      setLoading(true);
+      try {
+        const epicIdNum = parseInt(epicId, 10);
+        const detailsPromise = fetchWorkItemDetails(accessToken, org, epicIdNum);
+
+        let childrenPromise: Promise<AzureStory[]> | null = null;
+        if (workItemType === 'UserStory' && hasFeatures) {
+          childrenPromise = fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum);
+        } else if (workItemType === 'Task') {
+          childrenPromise = fetchStoriesByEpic(accessToken, org, projectId, epicIdNum);
+        }
+
+        const [fetchedDetails, fetchedChildren] = await Promise.all([
+          detailsPromise,
+          childrenPromise,
+        ]);
+
+        if (isCancelled) return;
+        setEpicDetails(fetchedDetails);
+
+        if (fetchedChildren) {
+          if (workItemType === 'UserStory' && hasFeatures) {
+            setFeatures(fetchedChildren);
+            if (savedFeatureId && fetchedChildren.some(f => f.id === savedFeatureId)) {
+              setFeatureId(savedFeatureId.toString());
+            }
+          } else if (workItemType === 'Task') {
+            setStories(fetchedChildren);
+            if (savedStoryId && fetchedChildren.some(s => s.id === savedStoryId)) {
+              setStoryId(savedStoryId.toString());
+            }
+          }
+        }
+      } catch (err) {
+        if (isCancelled) return;
+        if (isLikelyAuthError(err)) {
+          await handleAuthError();
+        }
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadEpicDetailsAndChildren();
+    return () => { isCancelled = true; };
+  }, [accessToken, org, projectId, epicId, workItemType, hasFeatures, savedFeatureId, savedStoryId]);
+
+  // Fetch feature details when feature changes
+  useEffect(() => {
+    if (!featureId || !org) return;
+    let isCancelled = false;
+
+    const loadFeatureDetails = async () => {
+      setFeatureDetails(null);
+      setLoading(true);
+      try {
+        const featureIdNum = parseInt(featureId, 10);
+        const fetchedDetails = await fetchWorkItemDetails(accessToken, org, featureIdNum);
+        if (isCancelled) return;
+        setFeatureDetails(fetchedDetails);
+      } catch (err) {
+        if (isCancelled) return;
+        if (isLikelyAuthError(err)) {
+          await handleAuthError();
+        }
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadFeatureDetails();
+    return () => { isCancelled = true; };
+  }, [accessToken, org, featureId]);
+
+  // Fetch story details when story changes (Task mode only)
+  useEffect(() => {
+    if (!storyId || !org || workItemType !== 'Task') return;
+    let isCancelled = false;
+
+    const loadStoryDetails = async () => {
+      setStoryDetails(null);
+      setLoading(true);
+      try {
+        const storyIdNum = parseInt(storyId, 10);
+        const fetchedDetails = await fetchWorkItemDetails(accessToken, org, storyIdNum);
+        if (isCancelled) return;
+        setStoryDetails(fetchedDetails);
+      } catch (err) {
+        if (isCancelled) return;
+        if (isLikelyAuthError(err)) {
+          await handleAuthError();
+        }
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
+    loadStoryDetails();
+    return () => { isCancelled = true; };
+  }, [accessToken, org, storyId, workItemType]);
+
+  const toggleTag = (tag: string): void => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  // Determine if we can continue based on work item type
+  const canContinue = (() => {
+    if (!org || !projectId || availableTypes.length === 0) return false;
+
+    switch (workItemType) {
+      case 'Epic':
+        return true; // No parent needed
+      case 'Feature':
+        // Features can optionally have an Epic parent
+        if (epicId) return !!epicDetails;
+        return true;
+      case 'UserStory':
+        // User Stories need an Epic or Feature parent
+        if (featureId) return !!featureDetails;
+        if (epicId) return !!epicDetails;
+        return false;
+      case 'Task':
+        // Tasks need a User Story parent
+        return !!(epicId && storyId && storyDetails);
+      default:
+        return false;
+    }
+  })();
 
   const handleContinue = () => {
     if (!canContinue) return;
+
+    const hierarchyContext: HierarchyContext = {};
+
+    if (epicDetails) {
+      hierarchyContext.epic = {
+        id: epicDetails.id,
+        title: epicDetails.title,
+        description: epicDetails.description,
+      };
+    }
+
+    if (featureDetails) {
+      hierarchyContext.feature = {
+        id: featureDetails.id,
+        title: featureDetails.title,
+        description: featureDetails.description,
+        acceptanceCriteria: featureDetails.acceptanceCriteria,
+      };
+    }
+
+    if (storyDetails) {
+      hierarchyContext.userStory = {
+        id: storyDetails.id,
+        title: storyDetails.title,
+        description: storyDetails.description,
+        acceptanceCriteria: storyDetails.acceptanceCriteria,
+      };
+    }
+
+    // Determine parent title for display
+    let parentTitle = '';
+    switch (workItemType) {
+      case 'Feature':
+        parentTitle = epicDetails?.title || '';
+        break;
+      case 'UserStory':
+        parentTitle = featureDetails?.title || epicDetails?.title || '';
+        break;
+      case 'Task':
+        parentTitle = storyDetails?.title || '';
+        break;
+    }
+
     onContinue({
       org,
       projectId,
       availableTypes,
+      hierarchyContext,
+      selectedTags,
+      parentTitle,
     });
   };
+
+  // Determine if selectors should be shown
+  const showEpicSelector = projectId && hasEpics && epics.length > 0 && workItemType !== 'Epic';
+  const showFeatureSelector = hasFeatures && workItemType === 'UserStory' && epicId && features.length > 0;
+  const showStorySelector = workItemType === 'Task' && hasUserStories && epicId;
+  const showTags = projectId && availableTags.length > 0 && workItemType !== 'Epic';
 
   return (
     <div className="screen">
       <div className="screen-header">
-        <h2>Select Project</h2>
+        <h2>Select Project{workItemType !== 'Epic' ? ' & Parent' : ''}</h2>
         <p>Choose your Azure DevOps organization and project</p>
       </div>
 
@@ -207,7 +485,13 @@ export function SelectProjectScreen({
         <Select
           label="Organization"
           value={org}
-          onChange={setOrg}
+          onChange={(val) => {
+            setOrg(val);
+            setProjectId('');
+            setEpicId('');
+            setFeatureId('');
+            setStoryId('');
+          }}
           placeholder={loading && orgs.length === 0 ? 'Loading...' : 'Select an organization'}
           options={orgs.map((o) => ({ value: o, label: o }))}
         />
@@ -215,32 +499,108 @@ export function SelectProjectScreen({
         <Select
           label="Project"
           value={projectId}
-          onChange={setProjectId}
+          onChange={(val) => {
+            setProjectId(val);
+            setEpicId('');
+            setFeatureId('');
+            setStoryId('');
+          }}
           placeholder={
             !org ? 'Select an organization first' : loading ? 'Loading...' : 'Select a project'
           }
           options={projects.map((p) => ({ value: p.id, label: p.name }))}
         />
 
-        {projectId && availableTypes.length > 0 && (
-          <div style={{
-            background: '#f3e8ff',
-            border: '1px solid #d8b4fe',
-            borderRadius: '8px',
-            padding: '12px',
-            fontSize: '12px',
-            color: '#6b21a8',
-          }}>
-            <strong>Available work item types:</strong>
-            <div style={{ marginTop: '4px' }}>
-              {availableTypes.map((t) => t.name).join(', ')}
+        {showEpicSelector && (
+          <Select
+            label={workItemType === 'Feature' ? 'Epic (Optional)' : 'Epic'}
+            value={epicId}
+            onChange={(val) => {
+              setEpicId(val);
+              setFeatureId('');
+              setStoryId('');
+            }}
+            placeholder={
+              loading && epics.length === 0
+                ? 'Loading...'
+                : workItemType === 'Feature'
+                ? 'Select an epic (optional)'
+                : 'Select an epic'
+            }
+            options={
+              workItemType === 'Feature'
+                ? [{ value: '', label: '(No parent epic)' }, ...epics.map((e) => ({
+                    value: e.id.toString(),
+                    label: `#${e.id} - ${e.title}`,
+                  }))]
+                : epics.map((e) => ({
+                    value: e.id.toString(),
+                    label: `#${e.id} - ${e.title}`,
+                  }))
+            }
+          />
+        )}
+
+        {showFeatureSelector && (
+          <Select
+            label="Feature (Optional)"
+            value={featureId}
+            onChange={setFeatureId}
+            placeholder={loading ? 'Loading...' : 'Select a feature (optional)'}
+            options={[
+              { value: '', label: '(Create under Epic directly)' },
+              ...features.map((f) => ({
+                value: f.id.toString(),
+                label: `#${f.id} - ${f.title}`,
+              })),
+            ]}
+          />
+        )}
+
+        {showStorySelector && (
+          <Select
+            label="User Story"
+            value={storyId}
+            onChange={setStoryId}
+            placeholder={
+              !epicId ? 'Select an epic first' : loading ? 'Loading...' : 'Select a user story'
+            }
+            options={stories.map((s) => ({
+              value: s.id.toString(),
+              label: `#${s.id} - ${s.title}`,
+            }))}
+          />
+        )}
+
+        {showTags && (
+          <div>
+            <label
+              style={{
+                fontSize: '12px',
+                fontWeight: 500,
+                color: '#666666',
+                display: 'block',
+                marginBottom: '4px',
+              }}
+            >
+              Tags
+            </label>
+            <div className="tags-container">
+              {availableTags.slice(0, 30).map((tag) => (
+                <Tag
+                  key={tag}
+                  label={tag}
+                  selected={selectedTags.includes(tag)}
+                  onClick={() => toggleTag(tag)}
+                />
+              ))}
             </div>
           </div>
         )}
 
         {projectId && loading && (
           <div style={{ fontSize: '12px', color: '#666666' }}>
-            Loading work item types...
+            Loading...
           </div>
         )}
       </div>
