@@ -8,6 +8,7 @@ import {
   fetchProjects,
   fetchWorkItemTypes,
   fetchEpics,
+  fetchStories,
   fetchFeaturesByEpic,
   fetchStoriesByEpic,
   fetchWorkItemDetails,
@@ -224,12 +225,12 @@ export function SelectProjectScreen({
     return () => { isCancelled = true; };
   }, [accessToken, org, projectId]);
 
-  // Fetch epics and tags when project is selected (for non-Epic work item types)
+  // Fetch epics, stories (for Tasks), and tags when project is selected
   useEffect(() => {
     if (!org || !projectId || workItemType === 'Epic') return;
     let isCancelled = false;
 
-    const loadEpicsAndTags = async () => {
+    const loadEpicsStoriesAndTags = async () => {
       setEpics([]);
       setEpicId('');
       setEpicDetails(null);
@@ -241,13 +242,32 @@ export function SelectProjectScreen({
       setStoryDetails(null);
       setLoading(true);
       try {
-        const [fetchedEpics, fetchedTags] = await Promise.all([
+        // For Tasks, load all stories upfront alongside epics
+        const promises: Promise<unknown>[] = [
           fetchEpics(accessToken, org, projectId),
           fetchTags(accessToken, org, projectId),
-        ]);
+        ];
+        if (workItemType === 'Task') {
+          promises.push(fetchStories(accessToken, org, projectId));
+        }
+
+        const results = await Promise.all(promises);
         if (isCancelled) return;
+
+        const fetchedEpics = results[0] as AzureStory[];
+        const fetchedTags = results[1] as string[];
         setEpics(fetchedEpics);
         setAvailableTags(fetchedTags);
+
+        // For Tasks, set the stories
+        if (workItemType === 'Task' && results[2]) {
+          const fetchedStories = results[2] as AzureStory[];
+          setStories(fetchedStories);
+          // Auto-select saved story if available
+          if (savedStoryId && fetchedStories.some(s => s.id === savedStoryId)) {
+            setStoryId(savedStoryId.toString());
+          }
+        }
 
         // Auto-select saved epic if available
         if (savedEpicId && fetchedEpics.some(e => e.id === savedEpicId)) {
@@ -263,11 +283,12 @@ export function SelectProjectScreen({
       }
     };
 
-    loadEpicsAndTags();
+    loadEpicsStoriesAndTags();
     return () => { isCancelled = true; };
-  }, [accessToken, org, projectId, workItemType, savedEpicId]);
+  }, [accessToken, org, projectId, workItemType, savedEpicId, savedStoryId]);
 
-  // Fetch epic details and children when epic changes
+  // Fetch epic details and children (features for UserStory) when epic changes
+  // Note: For Tasks, stories are already loaded upfront, so we only fetch epic details
   useEffect(() => {
     if (!epicId || !org || !projectId) return;
     let isCancelled = false;
@@ -277,19 +298,21 @@ export function SelectProjectScreen({
       setFeatures([]);
       setFeatureId('');
       setFeatureDetails(null);
-      setStories([]);
-      setStoryId('');
-      setStoryDetails(null);
+      // Don't clear stories for Tasks - they're already loaded
+      if (workItemType !== 'Task') {
+        setStories([]);
+        setStoryId('');
+        setStoryDetails(null);
+      }
       setLoading(true);
       try {
         const epicIdNum = parseInt(epicId, 10);
         const detailsPromise = fetchWorkItemDetails(accessToken, org, epicIdNum);
 
+        // Only fetch children for UserStory (features), not for Tasks
         let childrenPromise: Promise<AzureStory[]> | null = null;
         if (workItemType === 'UserStory' && hasFeatures) {
           childrenPromise = fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum);
-        } else if (workItemType === 'Task') {
-          childrenPromise = fetchStoriesByEpic(accessToken, org, projectId, epicIdNum);
         }
 
         const [fetchedDetails, fetchedChildren] = await Promise.all([
@@ -300,17 +323,10 @@ export function SelectProjectScreen({
         if (isCancelled) return;
         setEpicDetails(fetchedDetails);
 
-        if (fetchedChildren) {
-          if (workItemType === 'UserStory' && hasFeatures) {
-            setFeatures(fetchedChildren);
-            if (savedFeatureId && fetchedChildren.some(f => f.id === savedFeatureId)) {
-              setFeatureId(savedFeatureId.toString());
-            }
-          } else if (workItemType === 'Task') {
-            setStories(fetchedChildren);
-            if (savedStoryId && fetchedChildren.some(s => s.id === savedStoryId)) {
-              setStoryId(savedStoryId.toString());
-            }
+        if (fetchedChildren && workItemType === 'UserStory' && hasFeatures) {
+          setFeatures(fetchedChildren);
+          if (savedFeatureId && fetchedChildren.some(f => f.id === savedFeatureId)) {
+            setFeatureId(savedFeatureId.toString());
           }
         }
       } catch (err) {
@@ -325,7 +341,7 @@ export function SelectProjectScreen({
 
     loadEpicDetailsAndChildren();
     return () => { isCancelled = true; };
-  }, [accessToken, org, projectId, epicId, workItemType, hasFeatures, savedFeatureId, savedStoryId]);
+  }, [accessToken, org, projectId, epicId, workItemType, hasFeatures, savedFeatureId]);
 
   // Fetch feature details when feature changes
   useEffect(() => {
@@ -404,8 +420,8 @@ export function SelectProjectScreen({
         if (epicId) return !!epicDetails;
         return false;
       case 'Task':
-        // Tasks need a User Story parent
-        return !!(epicId && storyId && storyDetails);
+        // Tasks need a User Story parent (Epic is optional)
+        return !!(storyId && storyDetails);
       default:
         return false;
     }
@@ -469,7 +485,8 @@ export function SelectProjectScreen({
   // Determine if selectors should be shown
   const showEpicSelector = projectId && hasEpics && epics.length > 0 && workItemType !== 'Epic';
   const showFeatureSelector = hasFeatures && workItemType === 'UserStory' && epicId && features.length > 0;
-  const showStorySelector = workItemType === 'Task' && hasUserStories && epicId;
+  // For Tasks, show User Story selector alongside Epic (not dependent on Epic selection)
+  const showStorySelector = workItemType === 'Task' && hasUserStories && stories.length > 0;
   const showTags = projectId && availableTags.length > 0 && workItemType !== 'Epic';
 
   return (
@@ -562,9 +579,7 @@ export function SelectProjectScreen({
             label="User Story"
             value={storyId}
             onChange={setStoryId}
-            placeholder={
-              !epicId ? 'Select an epic first' : loading ? 'Loading...' : 'Select a user story'
-            }
+            placeholder={loading ? 'Loading...' : 'Select a user story'}
             options={stories.map((s) => ({
               value: s.id.toString(),
               label: `#${s.id} - ${s.title}`,
