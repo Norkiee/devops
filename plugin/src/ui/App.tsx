@@ -458,7 +458,7 @@ export function App(): React.ReactElement {
     }
   }, [results]);
 
-  const handleCreateMore = useCallback(() => {
+  const handleGoHome = useCallback(() => {
     setFrameWorkItems([]);
     setResults([]);
     setError(null);
@@ -578,7 +578,7 @@ export function App(): React.ReactElement {
           parentTitle={parentTitle}
           tags={selectedTags}
           onViewInAzure={handleViewInAzure}
-          onCreateMore={handleCreateMore}
+          onGoHome={handleGoHome}
         />
       )}
 

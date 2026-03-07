@@ -10,7 +10,7 @@ interface SuccessScreenProps {
   parentTitle: string;
   tags: string[];
   onViewInAzure: () => void;
-  onCreateMore: () => void;
+  onGoHome: () => void;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -48,25 +48,25 @@ export function SuccessScreen({
   parentTitle,
   tags,
   onViewInAzure,
-  onCreateMore,
+  onGoHome,
 }: SuccessScreenProps): React.ReactElement {
   const successCount = results.filter((r) => r.success).length;
 
-  const getLabels = (): { singular: string; plural: string; parent: string; button: string } => {
+  const getLabels = (): { singular: string; plural: string; parent: string } => {
     switch (workItemType) {
       case 'Epic':
-        return { singular: 'epic', plural: 'epics', parent: 'Project', button: 'Epics' };
+        return { singular: 'epic', plural: 'epics', parent: 'Project' };
       case 'Feature':
-        return { singular: 'feature', plural: 'features', parent: 'Epic', button: 'Features' };
+        return { singular: 'feature', plural: 'features', parent: 'Epic' };
       case 'UserStory':
-        return { singular: 'user story', plural: 'user stories', parent: 'Parent', button: 'Stories' };
+        return { singular: 'user story', plural: 'user stories', parent: 'Parent' };
       case 'Task':
       default:
-        return { singular: 'task', plural: 'tasks', parent: 'Story', button: 'Tasks' };
+        return { singular: 'task', plural: 'tasks', parent: 'Story' };
     }
   };
 
-  const { singular, plural, parent, button } = getLabels();
+  const { singular, plural, parent } = getLabels();
 
   return (
     <div className="screen screen-center">
@@ -88,8 +88,8 @@ export function SuccessScreen({
         <Button onClick={onViewInAzure} fullWidth>
           View in Azure DevOps
         </Button>
-        <Button onClick={onCreateMore} variant="secondary" fullWidth>
-          Create More {button}
+        <Button onClick={onGoHome} variant="secondary" fullWidth>
+          Go Home
         </Button>
       </div>
     </div>
