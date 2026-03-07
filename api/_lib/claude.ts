@@ -66,23 +66,30 @@ async function fetchWithRetry(
   throw lastError || new Error('Unknown error during fetch');
 }
 
-const EPIC_SYSTEM_PROMPT = `You are a product strategist helping create Epics for UI/UX design work. Given information about design frames from Figma, generate high-level Epics that represent major product initiatives or features.
+const EPIC_SYSTEM_PROMPT = `You are a design initiative generator for UI/UX designers. Given information about design frames from Figma, generate high-level Epics that represent major design efforts and initiatives.
 
 Context:
-- Epics are large bodies of work that can be broken down into smaller pieces
-- They represent significant product capabilities or user journeys
-- They should be business-value focused, not implementation-focused
+- Epics are large bodies of design work that can be broken down into smaller pieces
+- They represent significant design initiatives, system overhauls, or comprehensive design projects
+- They should be design-outcome focused, not development-focused
 
 Generate 1-2 Epics per frame depending on scope:
 - Single-purpose frames: 1 epic
-- Complex frames with multiple user journeys: 2 epics
+- Complex frames with multiple design concerns: 2 epics
+
+Examples of design-focused Epics:
+- "Design System Foundation"
+- "Mobile-First Responsive Redesign"
+- "Accessibility Compliance Design Audit"
+- "Complete Visual Language for Authentication Flow"
+- "Dashboard Information Architecture Redesign"
 
 Guidelines:
-- Title format: Short, value-driven phrase (e.g., "User Authentication", "Dashboard Analytics")
-- Description should explain the business value and scope
-- Include acceptance criteria as high-level success metrics
-- Focus on WHAT value is delivered, not HOW it's implemented
-- Keep scope large enough to contain multiple features/stories
+- Title format: Design initiative phrase (e.g., "Design System Foundation", "Visual Identity Refresh")
+- Description should explain the design goals, scope, and expected deliverables
+- Include acceptance criteria as design quality metrics and deliverables
+- Focus on design outcomes: mockups, prototypes, specs, documentation
+- Keep scope large enough to contain multiple design features/stories
 
 Output JSON format:
 {
@@ -95,24 +102,31 @@ Output JSON format:
   ]
 }`;
 
-const FEATURE_SYSTEM_PROMPT = `You are a product requirements generator for UI/UX design work. Given information about a design frame from Figma and optionally the parent Epic context, generate Features that represent distinct product capabilities.
+const FEATURE_SYSTEM_PROMPT = `You are a design feature generator for UI/UX designers. Given information about a design frame from Figma and optionally the parent Epic context, generate Features that represent distinct design deliverables and capabilities.
 
 Context:
-- Features are mid-level work items between Epics and User Stories
-- They represent a specific capability that delivers user value
-- They should be deliverable within a few sprints
+- Features are mid-level design work items between Epics and User Stories
+- They represent a specific design deliverable or design capability
+- They should be completable within a few sprints by a designer
 
 Generate 1-3 Features per frame depending on complexity:
 - Simple frames: 1 feature
 - Medium frames: 2 features
-- Complex frames with distinct capabilities: 3 features
+- Complex frames with distinct design concerns: 3 features
+
+Examples of design-focused Features:
+- "Complete Visual Design System for Authentication"
+- "Interactive Prototype for Onboarding Flow"
+- "Responsive Design Specifications"
+- "Component Library for Form Elements"
+- "Motion Design for Page Transitions"
 
 Guidelines:
-- Title format: Capability-focused phrase (e.g., "Login with Social Accounts", "Real-time Notifications")
-- Description should explain what capability is being delivered and why
-- Include acceptance criteria as testable conditions
-- Focus on user-facing functionality
-- Each feature should be independently valuable
+- Title format: Design deliverable phrase (e.g., "High-Fidelity Dashboard Mockups", "Interactive Checkout Prototype")
+- Description should explain what design deliverable is being created and its purpose
+- Include acceptance criteria as design quality standards and deliverables
+- Focus on design outputs: mockups, prototypes, specs, components, documentation
+- Each feature should be independently deliverable by a designer
 
 Output JSON format:
 {
@@ -125,25 +139,32 @@ Output JSON format:
   ]
 }`;
 
-const TASK_SYSTEM_PROMPT = `You are a technical task generator for UI/UX design work. Given information about a design frame from Figma and the parent Epic and User Story context, generate clear, actionable development tasks.
+const TASK_SYSTEM_PROMPT = `You are a design task generator for UI/UX designers. Given information about a design frame from Figma and the parent context, generate clear, actionable design tasks.
 
 Context:
-- You will receive the Epic title/description and User Story title/description/acceptance criteria
-- Tasks should help implement the User Story
-- Tasks should align with the acceptance criteria
+- You will receive the parent Epic/Feature/User Story context when available
+- Tasks should be completable by a designer in Figma or design tools
+- Tasks should produce design deliverables, not code
 
-Generate 1-5 Tasks per frame depending on complexity:
+Generate 1-5 design tasks per frame depending on complexity:
 - Simple frames (few elements): 1-2 tasks
 - Medium frames (forms, sections): 2-3 tasks
 - Complex frames (dashboards): 3-5 tasks
 
+Task types to consider:
+- Visual design: mockups, color refinement, typography, spacing, visual polish
+- Interaction design: hover states, transitions, animations, micro-interactions
+- Prototyping: interactive flows, click-through demos, user flow connections
+- Documentation: design specs, handoff notes, component documentation, annotations
+- Design system: component creation, pattern library updates, style guide entries
+- Iteration: incorporate feedback, refine based on review, explore alternatives
+
 Guidelines:
-- Task titles should be concise and action-oriented (start with a verb)
-- Descriptions should be 2-3 sentences covering what to build
-- Reference specific UI elements from the frame
-- Don't create tasks too granular ("Style button") or too broad ("Build screen")
-- Group related work into cohesive tasks
-- Consider the acceptance criteria when defining tasks
+- Start titles with design verbs: "Design", "Create", "Refine", "Document", "Prototype", "Iterate", "Define", "Specify"
+- Focus on design deliverables, not development implementation
+- Reference specific UI elements visible in the frame
+- Keep tasks actionable and completable by a designer
+- Don't create tasks too granular ("Adjust padding") or too broad ("Design entire app")
 
 Output JSON format:
 {
@@ -152,24 +173,30 @@ Output JSON format:
   ]
 }`;
 
-const USER_STORY_SYSTEM_PROMPT = `You are a product requirements generator for UI/UX design work. Given information about a design frame from Figma and the parent Epic context, generate clear User Stories in the standard format.
+const USER_STORY_SYSTEM_PROMPT = `You are a design requirements generator for UI/UX designers. Given information about a design frame from Figma and the parent Epic context, generate design-focused User Stories.
 
 Context:
 - You will receive the Epic title and description that these stories belong to
-- Each story should contribute to the Epic's goals
-- Stories should be independently deliverable
+- Each story should represent design work that contributes to the Epic's goals
+- Stories should be independently deliverable by a designer
 
 Generate 1-3 User Stories per frame depending on complexity:
 - Simple frames (single purpose): 1 story
-- Medium frames (multiple features): 2 stories
-- Complex frames (many interactions): 3 stories
+- Medium frames (multiple design concerns): 2 stories
+- Complex frames (many interactions/states): 3 stories
+
+Examples of design-focused User Stories:
+- "Designer can create responsive layouts so that the design works across breakpoints"
+- "Designer can document component states so that developers understand all variations"
+- "Designer can prototype the checkout flow so that stakeholders can review the experience"
+- "Designer can define interaction patterns so that the UI feels consistent"
 
 Guidelines:
-- Title format: "User can [action]" or "[User type] can [action]"
-- Description format: "As a [user], I want to [action] so that [benefit]"
-- Include acceptance criteria as bullet points
-- Each story should be testable and deliverable
-- Focus on user value, not implementation details
+- Title format: "Designer can [design action]" or "[Design outcome] for [screen/component]"
+- Description format: "As a designer, I want to [design action] so that [design outcome/benefit]"
+- Include acceptance criteria as design deliverables and quality standards
+- Each story should be testable and deliverable by a designer
+- Focus on design outcomes: mockups, prototypes, specs, documentation
 - Keep scope reasonable (not too broad, not too narrow)
 
 Output JSON format:
@@ -199,7 +226,7 @@ Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate Epics for this design frame that represent major product initiatives.`;
+Generate Epics for this design frame that represent major design initiatives.`;
 }
 
 function buildFeaturePrompt(
@@ -223,7 +250,7 @@ Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate Features for this design frame that represent distinct product capabilities.`;
+Generate Features for this design frame that represent distinct design deliverables.`;
 }
 
 function buildTaskPrompt(
@@ -262,7 +289,7 @@ Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate development tasks for this design frame that help implement the User Story.`;
+Generate design tasks for this frame that a designer can complete in Figma.`;
 }
 
 function buildUserStoryPrompt(
@@ -286,7 +313,7 @@ Dimensions: ${frame.width}x${frame.height}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate User Stories for this design frame that contribute to the Epic's goals.`;
+Generate design-focused User Stories for this frame that a designer can deliver.`;
 }
 
 // Backwards compatibility
