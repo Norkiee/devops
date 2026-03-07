@@ -293,13 +293,14 @@ export async function queryEpics(
 export async function queryStoriesByEpic(
   opts: AzureApiOptions & { projectId: string; epicId: number }
 ): Promise<AzureStory[]> {
-  // Use WorkItemLinks to find User Stories linked to the Epic
+  // Use WorkItemLinks to find story-like items linked to the Epic
+  // Supports all process templates: User Story (Agile), Product Backlog Item (Scrum), Requirement (CMMI), Issue (Basic)
   const wiqlQuery = {
     query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
             FROM WorkItemLinks
             WHERE ([Source].[System.Id] = ${opts.epicId})
             AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward')
-            AND ([Target].[System.WorkItemType] = 'User Story')
+            AND ([Target].[System.WorkItemType] IN ('User Story', 'Product Backlog Item', 'Requirement', 'Issue'))
             AND ([Target].[System.State] <> 'Closed')
             AND ([Target].[System.State] <> 'Removed')
             MODE (MustContain)`,
