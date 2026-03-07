@@ -483,9 +483,10 @@ export function SelectProjectScreen({
   };
 
   // Determine if selectors should be shown
-  const showEpicSelector = projectId && hasEpics && epics.length > 0 && workItemType !== 'Epic';
+  // Don't show Epic selector for Tasks - just show User Story
+  const showEpicSelector = projectId && hasEpics && epics.length > 0 && workItemType !== 'Epic' && workItemType !== 'Task';
   const showFeatureSelector = hasFeatures && workItemType === 'UserStory' && epicId && features.length > 0;
-  // For Tasks, show User Story selector alongside Epic (not dependent on Epic selection)
+  // For Tasks, show User Story selector directly
   const showStorySelector = workItemType === 'Task' && hasUserStories && stories.length > 0;
   const showTags = projectId && availableTags.length > 0 && workItemType !== 'Epic';
 
