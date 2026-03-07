@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkItemType, WorkItemTypeInfo } from '../types';
+import { WorkItemType, WorkItemTypeInfo, isStoryLikeType } from '../types';
 import { Button } from '../components/Button';
 
 interface WorkItemTypeScreenProps {
@@ -171,9 +171,13 @@ export function WorkItemTypeScreen({
   // Filter type configs based on available types from Azure DevOps
   // Show all types by default when project not yet selected (availableTypes empty)
   const visibleTypes = availableTypes && availableTypes.length > 0
-    ? typeConfigs.filter((config) =>
-        availableTypes.some((at) => at.name === config.azureName)
-      )
+    ? typeConfigs.filter((config) => {
+        if (config.type === 'UserStory') {
+          // Match any story-like type (User Story, Product Backlog Item, Requirement, Issue)
+          return availableTypes.some((at) => isStoryLikeType(at.name));
+        }
+        return availableTypes.some((at) => at.name === config.azureName);
+      })
     : typeConfigs;
 
   return (
