@@ -137,10 +137,11 @@ export async function listProjects(
 export async function queryStories(
   opts: AzureApiOptions & { projectId: string }
 ): Promise<AzureStory[]> {
+  // Query for story-like work items (not Epics or Features)
   const wiqlQuery = {
     query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
             FROM WorkItems
-            WHERE [System.WorkItemType] IN ('Epic', 'Feature', 'User Story')
+            WHERE [System.WorkItemType] IN ('User Story', 'Product Backlog Item', 'Requirement', 'Issue')
             AND [System.State] <> 'Closed'
             AND [System.State] <> 'Removed'
             ORDER BY [System.ChangedDate] DESC`,
