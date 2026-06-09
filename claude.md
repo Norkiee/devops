@@ -8,11 +8,16 @@ Figma plugin that converts design frames into Azure DevOps work items (Epics, Fe
 plugin/                     # Figma plugin (React + TypeScript)
 ├── src/
 │   ├── main.ts            # Figma API access (selection, storage)
+│   ├── ui.tsx             # React entry point
 │   └── ui/                # React UI
 │       ├── App.tsx        # Main app, screen routing
-│       ├── screens/       # 9 screens (home → success)
-│       ├── hooks/         # useFrameSelection, useAzureAuth, etc.
-│       └── services/api.ts # Backend API calls
+│       ├── screens/       # 11 screens (see User Flow)
+│       ├── components/    # Button, Input, Select, Tag, WorkItemCard, etc.
+│       ├── hooks/         # useFrameSelection, useAzureAuth, usePluginStorage, useAutoResize
+│       ├── types/         # TypeScript type definitions
+│       └── services/
+│           ├── api.ts     # Backend API calls
+│           └── storage.ts # Plugin storage helpers
 
 api/                        # Vercel serverless functions
 ├── generate.ts            # POST /api/generate (Claude AI)
@@ -25,18 +30,23 @@ api/                        # Vercel serverless functions
     ├── azure.ts           # Azure DevOps API wrapper
     ├── claude.ts          # Claude API with retry logic
     ├── auth.ts            # Token validation, CORS
-    └── redis.ts           # Redis client (ioredis)
+    ├── db.ts              # Postgres KV + memory queries (Neon)
+    ├── logger.ts          # Request logging utility
+    └── types.ts           # Shared TypeScript types
 ```
 
 ## User Flow
 
-1. Select frames/sections in Figma
-2. Choose work item type (Epic, Feature, User Story, Task)
-3. Connect to Azure DevOps (Microsoft Entra ID OAuth)
-4. Select org, project, and parent (combined screen)
-5. Add optional context
-6. Generate work items (Claude AI)
-7. Review, edit, submit to Azure DevOps
+1. **HomeScreen** — Select frames/sections in Figma
+2. **WorkItemTypeScreen** — Choose work item type (Epic, Feature, User Story, Task)
+3. **ConnectAzureScreen** — Connect to Azure DevOps (Microsoft Entra ID OAuth)
+4. **SelectProjectScreen** — Select organization and project
+5. **SelectParentScreen** — Select parent work item (dynamic based on type)
+6. **ContextScreen** — Add optional context
+7. **GeneratingScreen** — Generate work items (Claude AI)
+8. **ReviewScreen** — Review and edit generated work items
+9. **SubmittingScreen** — Submit to Azure DevOps
+10. **SuccessScreen** / **PartialFailureScreen** — Results
 
 ## Key Technical Details
 
@@ -51,7 +61,7 @@ api/                        # Vercel serverless functions
 - Plugin generates state UUID
 - Opens popup to `/api/azure/auth`
 - Polls `/api/azure/poll` until complete
-- Tokens stored in Redis, sessionId in plugin storage
+- Tokens stored in Postgres (`kv_store`), sessionId in plugin storage
 
 **Auto-assignment:** All work items auto-assigned to current user
 
@@ -78,7 +88,7 @@ AZURE_CLIENT_SECRET=...
 AZURE_TENANT_ID=common
 AZURE_REDIRECT_URI=https://devops-psi.vercel.app/api/azure/callback
 AZURE_DEVOPS_RESOURCE_ID=499b84ac-1321-427f-aa17-267ca6975798
-REDIS_URL=redis://...
+DATABASE_URL=postgres://...   # Neon connection string
 ```
 
 ## API Endpoints
@@ -103,12 +113,17 @@ REDIS_URL=redis://...
 interface FrameData {
   id: string;
   name: string;
-  sectionName?: string;        // Parent section name
-  textContent: string[];       // Text layers (max 30)
-  componentNames: string[];    // Component instances (max 20)
-  nestedFrameNames: string[];  // Child frame names (max 10)
+  sectionName?: string;              // Parent section name
+  textContent: string[];             // Text layers (max 30)
+  componentNames: string[];          // Component instances (max 20)
+  nestedFrameNames: string[];        // Child frame names (max 10)
   width: number;
   height: number;
+  // Enhanced extraction (optional)
+  textElements?: TextElement[];      // Text with inferred role (heading, body, etc.)
+  interactiveElements?: InteractiveElement[];  // Buttons, inputs, etc.
+  sections?: SectionInfo[];          // Section metadata
+  layoutPattern?: LayoutPattern;     // form, list, grid, dashboard, modal, etc.
 }
 ```
 
@@ -116,5 +131,6 @@ interface FrameData {
 
 - Plugin dist files (`plugin/dist/`) are gitignored; rebuild after source changes
 - 60s function timeout for Claude retry logic
-- Redis uses atomic `kvGetDel` for OAuth polling (prevents race conditions)
+- Postgres uses atomic `DELETE … RETURNING` (`kvGetDel`) for OAuth polling (prevents race conditions)
+- Run `migrations/001_init.sql` against the Neon database before first use
 - Story-like types: User Story, Product Backlog Item, Requirement, Issue

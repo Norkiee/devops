@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'crypto';
-import { kvSet } from '../_lib/redis';
+import { kvSet } from '../_lib/db';
 
 // Validate required environment variables
 function getRequiredEnvVars(): {

@@ -74,7 +74,8 @@ export async function generateWorkItems(
   frames: FrameData[],
   workItemType: WorkItemType = 'Task',
   context?: string,
-  hierarchyContext?: HierarchyContext
+  hierarchyContext?: HierarchyContext,
+  fileKey?: string
 ): Promise<{ workItemType: WorkItemType; frameWorkItems: FrameWorkItems[] }> {
   const data = await request<{
     workItemType: WorkItemType;
@@ -82,12 +83,36 @@ export async function generateWorkItems(
     frameTasks?: FrameTasks[];
   }>('/api/generate', {
     method: 'POST',
-    body: JSON.stringify({ frames, context, workItemType, hierarchyContext }),
+    body: JSON.stringify({ frames, context, workItemType, hierarchyContext, fileKey }),
   });
   return {
     workItemType: data.workItemType,
     frameWorkItems: data.frameWorkItems,
   };
+}
+
+// Feedback status reported back to the memory layer after a submit pass.
+export type FeedbackStatus = 'approved' | 'edited' | 'rejected' | 'pushed';
+
+export interface FeedbackItem {
+  workItemId: string;
+  status: FeedbackStatus;
+  azureId?: number;
+  feedback?: string;
+}
+
+// Records what happened to generated items after submit. Best-effort: never
+// throws, so a memory hiccup can't interrupt the plugin flow.
+export async function recordFeedback(items: FeedbackItem[]): Promise<void> {
+  if (items.length === 0) return;
+  try {
+    await request('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  } catch {
+    // Intentionally swallowed — feedback is non-critical.
+  }
 }
 
 // Backwards compatibility

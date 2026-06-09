@@ -1,7 +1,16 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { generateWorkItemsForFrame } from './_lib/claude';
+import { generateWorkItemsForUnit } from './_lib/claude';
+import { framesToGenerationInput } from './_lib/sources/frames';
 import { FrameData, FrameWorkItems, WorkItemType, HierarchyContext } from './_lib/types';
 import { handleCors } from './_lib/auth';
+import {
+  safeMemory,
+  getOrCreateFlows,
+  loadPriorItems,
+  insertGeneratedItems,
+  GeneratedItemRow,
+  PriorItem,
+} from './_lib/db';
 
 // Validation limits
 const MAX_FRAMES = 20;
@@ -11,6 +20,32 @@ const MAX_COMPONENT_NAMES = 30;
 const MAX_NESTED_FRAME_NAMES = 20;
 const MAX_CONTEXT_LENGTH = 2000;
 const MAX_FRAME_NAME_LENGTH = 200;
+const MAX_FILE_KEY_LENGTH = 200;
+
+// Turns prior generated items into a prompt addendum so Claude avoids repeating
+// past work and steers clear of previously-rejected items.
+function buildMemoryContext(prior: PriorItem[]): string {
+  if (prior.length === 0) return '';
+
+  const rejected = prior.filter((p) => p.status === 'rejected');
+  const others = prior.filter((p) => p.status !== 'rejected');
+  const lines: string[] = [];
+
+  if (others.length > 0) {
+    lines.push('Previously generated work items for this flow (do NOT repeat these):');
+    for (const p of others.slice(0, 50)) lines.push(`- ${p.title}`);
+  }
+
+  if (rejected.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push('Previously REJECTED items (avoid these and anything similar):');
+    for (const p of rejected.slice(0, 50)) {
+      lines.push(`- ${p.title}${p.feedback ? ` (reason: ${p.feedback})` : ''}`);
+    }
+  }
+
+  return lines.join('\n');
+}
 
 function validateFrameData(frame: unknown, index: number): FrameData {
   if (!frame || typeof frame !== 'object') {
@@ -97,6 +132,7 @@ export default async function handler(
       context?: unknown;
       workItemType?: unknown;
       hierarchyContext?: unknown;
+      fileKey?: unknown;
     };
 
     if (!body.frames || !Array.isArray(body.frames) || body.frames.length === 0) {
@@ -145,11 +181,87 @@ export default async function handler(
       hierarchyContext = body.hierarchyContext as HierarchyContext;
     }
 
+    // Optional fileKey enables the memory layer. Absent (older plugin) → memory
+    // is skipped entirely and generation behaves exactly as before.
+    let fileKey: string | undefined;
+    if (body.fileKey !== undefined && typeof body.fileKey === 'string' && body.fileKey) {
+      fileKey = body.fileKey.slice(0, MAX_FILE_KEY_LENGTH);
+    }
+
+    // Adapter A — normalize frames into the generation input the core consumes.
+    // The frames path is now just one source feeding the shared generator.
+    const input = framesToGenerationInput(
+      frames,
+      workItemType,
+      context,
+      hierarchyContext
+    );
+
+    // Memory (best-effort): resolve flows for this file and load prior items so
+    // the prompt can avoid duplicates and respect past rejections.
+    let flowIdByKey = new Map<string, string>();
+    let effectiveContext = context;
+    if (fileKey) {
+      const key = fileKey;
+      flowIdByKey = await safeMemory(
+        'resolve-flows+prior',
+        async () => {
+          const flowKeys = input.units
+            .map((u) => u.flowKey)
+            .filter((k): k is string => Boolean(k));
+          const idByKey = await getOrCreateFlows(key, flowKeys);
+          const prior = await loadPriorItems([...idByKey.values()]);
+          const memoryContext = buildMemoryContext(prior);
+          if (memoryContext) {
+            effectiveContext = context
+              ? `${context}\n\n${memoryContext}`
+              : memoryContext;
+          }
+          return idByKey;
+        },
+        flowIdByKey
+      );
+    }
+
     const frameWorkItems: FrameWorkItems[] = await Promise.all(
-      frames.map((frame) =>
-        generateWorkItemsForFrame(frame, workItemType, context, hierarchyContext)
+      input.units.map((unit) =>
+        generateWorkItemsForUnit(
+          unit,
+          input.workItemType,
+          effectiveContext,
+          input.hierarchyContext
+        )
       )
     );
+
+    // Memory (best-effort): persist proposed items, correlated to their flow.
+    // source_ref = the plugin's WorkItem.id so a later submit can update status.
+    if (fileKey) {
+      await safeMemory(
+        'insert-generated-items',
+        async () => {
+          const rows: GeneratedItemRow[] = [];
+          frameWorkItems.forEach((fwi, i) => {
+            const unit = input.units[i];
+            const flowId = unit?.flowKey
+              ? flowIdByKey.get(unit.flowKey) ?? null
+              : null;
+            for (const wi of fwi.workItems) {
+              rows.push({
+                flowId,
+                sourceType: input.sourceType,
+                workItemType,
+                title: wi.title,
+                description: wi.description,
+                sourceRef: wi.id,
+              });
+            }
+          });
+          await insertGeneratedItems(rows);
+        },
+        undefined
+      );
+    }
 
     // Return response with backwards-compatible frameTasks alias
     res.status(200).json({

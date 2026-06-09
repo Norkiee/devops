@@ -129,7 +129,11 @@ figma.showUI(__html__, { width: 700, height: 520 });
 figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number }) => {
   if (msg.type === 'get-selection') {
     const { frames, sections } = getSelectedFrames();
-    figma.ui.postMessage({ type: 'selection', frames, sections });
+    // fileKey enables the backend memory layer. It is undefined for unpublished
+    // plugins in dev; fall back to the stable document node id so memory still
+    // groups per-file.
+    const fileKey = figma.fileKey || figma.root.id;
+    figma.ui.postMessage({ type: 'selection', frames, sections, fileKey });
   }
 
   if (msg.type === 'get-storage') {

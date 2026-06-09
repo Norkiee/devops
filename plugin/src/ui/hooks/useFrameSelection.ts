@@ -6,6 +6,7 @@ interface FrameSelectionState {
   sections: SectionData[];
   frameCount: number;
   sectionCount: number;
+  fileKey: string;
 }
 
 interface UseFrameSelectionResult {
@@ -13,6 +14,7 @@ interface UseFrameSelectionResult {
   sections: SectionData[];
   frameCount: number;
   sectionCount: number;
+  fileKey: string;
   requestFrames: () => void;
 }
 
@@ -23,6 +25,7 @@ export function useFrameSelection(): UseFrameSelectionResult {
     sections: [],
     frameCount: 0,
     sectionCount: 0,
+    fileKey: '',
   });
 
   // Track whether we have received full frame data (not just count)
@@ -36,12 +39,13 @@ export function useFrameSelection(): UseFrameSelectionResult {
       if (msg.type === 'selection') {
         // Full frame data received - update everything atomically
         hasFrameData.current = true;
-        setState({
+        setState((prev) => ({
           frames: msg.frames || [],
           sections: msg.sections || [],
           frameCount: msg.frames?.length || 0,
           sectionCount: msg.sections?.length || 0,
-        });
+          fileKey: msg.fileKey || prev.fileKey,
+        }));
       }
 
       if (msg.type === 'selection-changed') {
@@ -54,6 +58,7 @@ export function useFrameSelection(): UseFrameSelectionResult {
           ) {
             hasFrameData.current = false;
             return {
+              ...prev,
               frames: [], // Clear frames since count changed
               sections: msg.sections || [],
               frameCount: msg.frameCount,
@@ -81,6 +86,7 @@ export function useFrameSelection(): UseFrameSelectionResult {
     sections: state.sections,
     frameCount: state.frameCount,
     sectionCount: state.sectionCount,
+    fileKey: state.fileKey,
     requestFrames,
   };
 }

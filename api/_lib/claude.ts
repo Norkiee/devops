@@ -1,4 +1,8 @@
 import { FrameData, FrameWorkItems, WorkItem, WorkItemType, HierarchyContext } from './types';
+import { GenerationUnit } from './sources/types';
+import { FrameContent, frameToUnit } from './sources/frames';
+
+const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
 const MAX_RETRIES = 3;
 const INITIAL_DELAY_MS = 1000;
@@ -195,16 +199,23 @@ Output JSON:
 // Backwards compatibility alias
 const SYSTEM_PROMPT = TASK_SYSTEM_PROMPT;
 
+// Renders the shared frame description block from a normalized unit. Output is
+// byte-identical to the previous FrameData-based prompts.
+function frameBlock(unit: GenerationUnit): string {
+  const c = unit.content as FrameContent;
+  return `Frame name: ${unit.refName}
+${c.sectionName ? `Section: ${c.sectionName}` : ''}
+Text content found: ${c.textContent.join(', ') || 'None'}
+Components used: ${c.componentNames.join(', ') || 'None'}
+Nested sections: ${c.nestedFrameNames?.join(', ') || 'None'}
+Dimensions: ${c.width}x${c.height}`;
+}
+
 function buildEpicPrompt(
-  frame: FrameData,
+  unit: GenerationUnit,
   context?: string
 ): string {
-  return `Frame name: ${frame.name}
-${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
-Text content found: ${frame.textContent.join(', ') || 'None'}
-Components used: ${frame.componentNames.join(', ') || 'None'}
-Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
-Dimensions: ${frame.width}x${frame.height}
+  return `${frameBlock(unit)}
 
 ${context ? `Additional context: ${context}` : ''}
 
@@ -212,7 +223,7 @@ Generate Epics for this design frame that represent major design initiatives.`;
 }
 
 function buildFeaturePrompt(
-  frame: FrameData,
+  unit: GenerationUnit,
   context?: string,
   hierarchyContext?: HierarchyContext
 ): string {
@@ -223,12 +234,7 @@ Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
 `
     : '';
 
-  return `${epicSection}Frame name: ${frame.name}
-${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
-Text content found: ${frame.textContent.join(', ') || 'None'}
-Components used: ${frame.componentNames.join(', ') || 'None'}
-Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
-Dimensions: ${frame.width}x${frame.height}
+  return `${epicSection}${frameBlock(unit)}
 
 ${context ? `Additional context: ${context}` : ''}
 
@@ -236,7 +242,7 @@ Generate Features for this design frame that represent distinct design deliverab
 }
 
 function buildTaskPrompt(
-  frame: FrameData,
+  unit: GenerationUnit,
   context?: string,
   hierarchyContext?: HierarchyContext
 ): string {
@@ -260,12 +266,7 @@ Feature Description: ${hierarchyContext.feature.description || 'Not provided'}
 `
     : '';
 
-  return `${epicSection}${featureSection}${storySection}Frame name: ${frame.name}
-${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
-Text content found: ${frame.textContent.join(', ') || 'None'}
-Components used: ${frame.componentNames.join(', ') || 'None'}
-Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
-Dimensions: ${frame.width}x${frame.height}
+  return `${epicSection}${featureSection}${storySection}${frameBlock(unit)}
 
 ${context ? `Additional context: ${context}` : ''}
 
@@ -273,7 +274,7 @@ Generate design tasks for this frame that a designer can complete in Figma.`;
 }
 
 function buildUserStoryPrompt(
-  frame: FrameData,
+  unit: GenerationUnit,
   context?: string,
   hierarchyContext?: HierarchyContext
 ): string {
@@ -284,21 +285,11 @@ Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
 `
     : '';
 
-  return `${epicSection}Frame name: ${frame.name}
-${frame.sectionName ? `Section: ${frame.sectionName}` : ''}
-Text content found: ${frame.textContent.join(', ') || 'None'}
-Components used: ${frame.componentNames.join(', ') || 'None'}
-Nested sections: ${frame.nestedFrameNames?.join(', ') || 'None'}
-Dimensions: ${frame.width}x${frame.height}
+  return `${epicSection}${frameBlock(unit)}
 
 ${context ? `Additional context: ${context}` : ''}
 
 Generate design-focused User Stories for this frame that a designer can deliver.`;
-}
-
-// Backwards compatibility
-function buildUserPrompt(frame: FrameData, context?: string): string {
-  return buildTaskPrompt(frame, context);
 }
 
 function extractJson(text: string): string {
@@ -512,39 +503,16 @@ function parseResponse(text: string): ParsedTask[] {
   return parseTaskResponse(text);
 }
 
-export async function generateWorkItemsForFrame(
-  frame: FrameData,
-  workItemType: WorkItemType = 'Task',
-  context?: string,
-  hierarchyContext?: HierarchyContext
-): Promise<FrameWorkItems> {
+// Shared raw Claude call: retry + response-shape validation, returns the text.
+// Every adapter funnels through this so retry and extraction logic live in one place.
+export async function callClaudeJSON(
+  system: string,
+  user: string,
+  maxTokens = 1500
+): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
-  }
-
-  // Select system prompt and user prompt based on work item type
-  let systemPrompt: string;
-  let userPrompt: string;
-
-  switch (workItemType) {
-    case 'Epic':
-      systemPrompt = EPIC_SYSTEM_PROMPT;
-      userPrompt = buildEpicPrompt(frame, context);
-      break;
-    case 'Feature':
-      systemPrompt = FEATURE_SYSTEM_PROMPT;
-      userPrompt = buildFeaturePrompt(frame, context, hierarchyContext);
-      break;
-    case 'UserStory':
-      systemPrompt = USER_STORY_SYSTEM_PROMPT;
-      userPrompt = buildUserStoryPrompt(frame, context, hierarchyContext);
-      break;
-    case 'Task':
-    default:
-      systemPrompt = TASK_SYSTEM_PROMPT;
-      userPrompt = buildTaskPrompt(frame, context, hierarchyContext);
-      break;
   }
 
   // Use fetch with retry logic for transient errors (429, 503, 529)
@@ -556,10 +524,10 @@ export async function generateWorkItemsForFrame(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1500, // Slightly more for acceptance criteria
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: user }],
     }),
   });
 
@@ -577,7 +545,42 @@ export async function generateWorkItemsForFrame(
     throw new Error('Unexpected response format from Claude API');
   }
 
-  const responseText = firstContent.text;
+  return firstContent.text;
+}
+
+// Core generator: turns one normalized unit into work items via Claude.
+// Used by every source adapter; the figma-frames path is just one caller.
+export async function generateWorkItemsForUnit(
+  unit: GenerationUnit,
+  workItemType: WorkItemType = 'Task',
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): Promise<FrameWorkItems> {
+  // Select system prompt and user prompt based on work item type
+  let systemPrompt: string;
+  let userPrompt: string;
+
+  switch (workItemType) {
+    case 'Epic':
+      systemPrompt = EPIC_SYSTEM_PROMPT;
+      userPrompt = buildEpicPrompt(unit, context);
+      break;
+    case 'Feature':
+      systemPrompt = FEATURE_SYSTEM_PROMPT;
+      userPrompt = buildFeaturePrompt(unit, context, hierarchyContext);
+      break;
+    case 'UserStory':
+      systemPrompt = USER_STORY_SYSTEM_PROMPT;
+      userPrompt = buildUserStoryPrompt(unit, context, hierarchyContext);
+      break;
+    case 'Task':
+    default:
+      systemPrompt = TASK_SYSTEM_PROMPT;
+      userPrompt = buildTaskPrompt(unit, context, hierarchyContext);
+      break;
+  }
+
+  const responseText = await callClaudeJSON(systemPrompt, userPrompt, 1500);
 
   let workItems: WorkItem[];
 
@@ -585,7 +588,7 @@ export async function generateWorkItemsForFrame(
     case 'Epic': {
       const parsedEpics = parseEpicResponse(responseText);
       workItems = parsedEpics.map((epic, index) => ({
-        id: `${frame.id}-${index + 1}`,
+        id: `${unit.refId}-${index + 1}`,
         title: epic.title,
         description: epic.description,
         selected: true,
@@ -595,7 +598,7 @@ export async function generateWorkItemsForFrame(
     case 'Feature': {
       const parsedFeatures = parseFeatureResponse(responseText);
       workItems = parsedFeatures.map((feature, index) => ({
-        id: `${frame.id}-${index + 1}`,
+        id: `${unit.refId}-${index + 1}`,
         title: feature.title,
         description: feature.description,
         selected: true,
@@ -605,7 +608,7 @@ export async function generateWorkItemsForFrame(
     case 'UserStory': {
       const parsedStories = parseUserStoryResponse(responseText);
       workItems = parsedStories.map((story, index) => ({
-        id: `${frame.id}-${index + 1}`,
+        id: `${unit.refId}-${index + 1}`,
         title: story.title,
         // User Stories don't have description - title uses "As a user..." format
         selected: true,
@@ -616,7 +619,7 @@ export async function generateWorkItemsForFrame(
     default: {
       const parsedTasks = parseTaskResponse(responseText);
       workItems = parsedTasks.map((task, index) => ({
-        id: `${frame.id}-${index + 1}`,
+        id: `${unit.refId}-${index + 1}`,
         title: task.title,
         description: task.description,
         selected: true,
@@ -626,11 +629,26 @@ export async function generateWorkItemsForFrame(
   }
 
   return {
-    frameId: frame.id,
-    frameName: frame.name,
-    sectionName: frame.sectionName,
+    frameId: unit.refId,
+    frameName: unit.refName,
+    sectionName: (unit.content as FrameContent).sectionName,
     workItems,
   };
+}
+
+// Backwards compatibility - frame-shaped entry point. Normalizes through Adapter A.
+export async function generateWorkItemsForFrame(
+  frame: FrameData,
+  workItemType: WorkItemType = 'Task',
+  context?: string,
+  hierarchyContext?: HierarchyContext
+): Promise<FrameWorkItems> {
+  return generateWorkItemsForUnit(
+    frameToUnit(frame),
+    workItemType,
+    context,
+    hierarchyContext
+  );
 }
 
 // Backwards compatibility - generates tasks only

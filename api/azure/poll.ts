@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { kvGetDel } from '../_lib/redis';
+import { kvGetDel } from '../_lib/db';
 import { handleCors } from '../_lib/auth';
 
 interface AuthResult {

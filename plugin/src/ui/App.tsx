@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Screen,
   FrameData,
@@ -21,7 +21,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { generateWorkItems, createTasks, createUserStories, createEpics, createFeatures } from './services/api';
+import { generateWorkItems, createTasks, createUserStories, createEpics, createFeatures, recordFeedback, FeedbackItem } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -40,7 +40,7 @@ export function App(): React.ReactElement {
   const [screen, setScreen] = useState<Screen>('home');
   const [error, setError] = useState<string | null>(null);
 
-  const { frames, sections, frameCount, sectionCount, requestFrames } = useFrameSelection();
+  const { frames, sections, frameCount, sectionCount, fileKey, requestFrames } = useFrameSelection();
   const auth = useAzureAuth();
   const { storage, updateStorage } = usePluginStorage();
   const containerRef = useAutoResize();
@@ -55,6 +55,9 @@ export function App(): React.ReactElement {
   // Generated work items
   const [frameWorkItems, setFrameWorkItems] = useState<FrameWorkItems[]>([]);
   const [completedFrameIds, setCompletedFrameIds] = useState<Set<string>>(new Set());
+  // Snapshot of items as first generated (id → title/description), so submit can
+  // detect which ones the user edited before pushing.
+  const originalItemsRef = useRef<Map<string, { title: string; description?: string }>>(new Map());
 
   // Azure connection state
   const [parentTitle, setParentTitle] = useState('');
@@ -141,17 +144,26 @@ export function App(): React.ReactElement {
           frames,
           workItemType,
           context,
-          hierarchyContext
+          hierarchyContext,
+          fileKey
         );
         setFrameWorkItems(generated);
         setCompletedFrameIds(new Set(generated.map((fwi) => fwi.frameId)));
+        // Snapshot originals for later edit detection on submit.
+        const originals = new Map<string, { title: string; description?: string }>();
+        for (const fwi of generated) {
+          for (const item of fwi.workItems) {
+            originals.set(item.id, { title: item.title, description: item.description });
+          }
+        }
+        originalItemsRef.current = originals;
         setScreen('review');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Generation failed');
         setScreen('context');
       }
     },
-    [frames, workItemType, hierarchyContext]
+    [frames, workItemType, hierarchyContext, fileKey]
   );
 
   const getTotalWorkItemCount = useCallback(() => {
@@ -209,6 +221,40 @@ export function App(): React.ReactElement {
     }
     return items;
   }, [frameWorkItems]);
+
+  // Reports the outcome of a submit pass to the memory layer (best-effort).
+  // pushed = landed in Azure, rejected = deselected, edited = changed pre-submit,
+  // approved = selected but not successfully pushed.
+  const sendFeedback = useCallback(
+    (submitResults: SubmitResult[]) => {
+      const selectedIds = new Set(getSelectedWorkItems().map((i) => i.id));
+      const resultById = new Map<string, { success: boolean; azureId?: number }>();
+      for (const r of submitResults) {
+        const id = 'workItemId' in r ? r.workItemId : 'taskId' in r ? r.taskId : '';
+        const azureId =
+          'azureTaskId' in r ? r.azureTaskId : 'azureId' in r ? r.azureId : undefined;
+        if (id) resultById.set(id, { success: r.success, azureId });
+      }
+
+      const allItems = frameWorkItems.flatMap((fwi) => fwi.workItems);
+      const feedback: FeedbackItem[] = allItems.map((item) => {
+        if (!selectedIds.has(item.id)) {
+          return { workItemId: item.id, status: 'rejected' };
+        }
+        const res = resultById.get(item.id);
+        if (res?.success) {
+          return { workItemId: item.id, status: 'pushed', azureId: res.azureId };
+        }
+        const orig = originalItemsRef.current.get(item.id);
+        const edited =
+          !!orig && (orig.title !== item.title || orig.description !== item.description);
+        return { workItemId: item.id, status: edited ? 'edited' : 'approved' };
+      });
+
+      void recordFeedback(feedback);
+    },
+    [getSelectedWorkItems, frameWorkItems]
+  );
 
   const handleSubmit = useCallback(async () => {
     const selectedItems = getSelectedWorkItems();
@@ -302,6 +348,7 @@ export function App(): React.ReactElement {
       }
 
       setResults(submitResults);
+      sendFeedback(submitResults);
       const allIds = new Set(selectedItems.map((item) => item.id));
       setSubmittedIds(allIds);
 
@@ -324,6 +371,7 @@ export function App(): React.ReactElement {
     azureOrg,
     azureProjectId,
     handleSessionExpired,
+    sendFeedback,
   ]);
 
   const handleRetry = useCallback(async () => {
@@ -421,6 +469,7 @@ export function App(): React.ReactElement {
         return retryResult || r;
       });
       setResults(updatedResults);
+      sendFeedback(updatedResults);
 
       const allIds = new Set(selectedItems.map((item) => item.id));
       setSubmittedIds(allIds);
@@ -445,6 +494,7 @@ export function App(): React.ReactElement {
     azureOrg,
     azureProjectId,
     handleSessionExpired,
+    sendFeedback,
   ]);
 
   const handleViewInAzure = useCallback(() => {
