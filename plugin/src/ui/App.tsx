@@ -133,6 +133,17 @@ export function App(): React.ReactElement {
     setScreen('connect-azure');
   }, [auth]);
 
+  // Explicit sign-out: clears the local token/session and resets the selected
+  // Azure org/project so a different account starts clean. The next connect
+  // shows the Microsoft account picker (prompt=select_account).
+  const handleDisconnect = useCallback(() => {
+    auth.logout();
+    setAzureOrg('');
+    setAzureProjectId('');
+    setHierarchyContext({});
+    setScreen('connect-azure');
+  }, [auth]);
+
   const handleGenerate = useCallback(
     async (context?: string) => {
       setScreen('generating');
@@ -560,6 +571,7 @@ export function App(): React.ReactElement {
           isAuthenticated={auth.isAuthenticated}
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-project')}
+          onDisconnect={handleDisconnect}
           onBack={() => setScreen('work-item-type')}
         />
       )}

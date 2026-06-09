@@ -43,6 +43,9 @@ export default function handler(
     redirect_uri: envVars.redirectUri,
     scope: `${envVars.resourceId}/.default offline_access`,
     state,
+    // Always show the account picker so users can connect a different Microsoft
+    // account instead of being silently re-logged into the SSO-cached one.
+    prompt: 'select_account',
   });
 
   res.redirect(

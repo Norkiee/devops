@@ -9,6 +9,7 @@ interface ConnectAzureScreenProps {
   onTaskToggle?: (frameId: string, taskId: string) => void;
   onConnect: () => void;
   onContinue: () => void;
+  onDisconnect: () => void;
   onBack: () => void;
 }
 
@@ -53,6 +54,7 @@ export function ConnectAzureScreen({
   onTaskToggle,
   onConnect,
   onContinue,
+  onDisconnect,
   onBack,
 }: ConnectAzureScreenProps): React.ReactElement {
   // Calculate counts if frameTasks provided
@@ -98,7 +100,10 @@ export function ConnectAzureScreen({
                 Continue
               </Button>
               <Button onClick={onConnect} fullWidth variant="secondary">
-                Reconnect to Azure DevOps
+                Switch account
+              </Button>
+              <Button onClick={onDisconnect} variant="text" fullWidth>
+                Disconnect
               </Button>
             </>
           ) : (
