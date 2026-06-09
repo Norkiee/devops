@@ -1,8 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTask, getCurrentUser, settleWithConcurrency } from '../_lib/azure';
-
-// Cap in-flight creates so a large batch doesn't burst Azure's rate limit.
-const AZURE_CREATE_CONCURRENCY = 5;
+import { createTask, getCurrentUser, settleWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 

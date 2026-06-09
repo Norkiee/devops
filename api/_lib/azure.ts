@@ -25,6 +25,10 @@ function retryDelayMs(response: Response, attempt: number): number {
   return Math.min(BASE_RETRY_DELAY_MS * 2 ** attempt, MAX_RETRY_DELAY_MS);
 }
 
+// Default cap on in-flight work-item creates, shared by every bulk endpoint so
+// a large batch doesn't burst Azure's rate limit.
+export const AZURE_CREATE_CONCURRENCY = 5;
+
 // Runs `worker` over items with a bounded number of in-flight calls, returning
 // allSettled-style results. Keeps bulk creates from bursting Azure's rate limit.
 export async function settleWithConcurrency<T, R>(
@@ -42,6 +46,27 @@ export async function settleWithConcurrency<T, R>(
       } catch (reason) {
         results[i] = { status: 'rejected', reason };
       }
+    }
+  }
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, run);
+  await Promise.all(lanes);
+  return results;
+}
+
+// Like Promise.all(items.map(worker)) but with bounded concurrency, preserving
+// input order. Use when the worker handles its own errors (returns a result
+// object) so a throw is exceptional and should reject like Promise.all.
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function run(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i], i);
     }
   }
   const lanes = Array.from({ length: Math.min(limit, items.length) }, run);

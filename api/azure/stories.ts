@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryStories, queryStoriesByEpic, createUserStory, getCurrentUser } from '../_lib/azure';
+import { queryStories, queryStoriesByEpic, createUserStory, getCurrentUser, mapWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 import { UserStoryToCreate, CreateUserStoryResult } from '../_lib/types';
 
@@ -78,41 +78,43 @@ export default async function handler(
       // Continue without auto-assignment if we can't get current user
     }
 
-    const createPromises = stories.map(async (story): Promise<CreateUserStoryResult> => {
-      try {
-        const result = await createUserStory(
-          {
-            org: auth.org,
-            accessToken: auth.accessToken,
-            projectId,
-            workItemTypeName,
-          },
-          {
-            title: story.title,
-            description: story.description,
-            parentEpicId: story.parentEpicId,
-            tags: story.tags,
-            state: 'New',
-            assignedTo: currentUserEmail,
-          }
-        );
-        return {
-          workItemId: story.workItemId,
-          success: true,
-          azureId: result.id,
-          url: result.url,
-        };
-      } catch (error) {
-        console.error(`Failed to create story ${story.workItemId}:`, error);
-        return {
-          workItemId: story.workItemId,
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        };
+    const results = await mapWithConcurrency(
+      stories,
+      AZURE_CREATE_CONCURRENCY,
+      async (story): Promise<CreateUserStoryResult> => {
+        try {
+          const result = await createUserStory(
+            {
+              org: auth.org,
+              accessToken: auth.accessToken,
+              projectId,
+              workItemTypeName,
+            },
+            {
+              title: story.title,
+              description: story.description,
+              parentEpicId: story.parentEpicId,
+              tags: story.tags,
+              state: 'New',
+              assignedTo: currentUserEmail,
+            }
+          );
+          return {
+            workItemId: story.workItemId,
+            success: true,
+            azureId: result.id,
+            url: result.url,
+          };
+        } catch (error) {
+          console.error(`Failed to create story ${story.workItemId}:`, error);
+          return {
+            workItemId: story.workItemId,
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+        }
       }
-    });
-
-    const results = await Promise.all(createPromises);
+    );
 
     const hasAuthError = results.some(
       (r) => !r.success && r.error && isAzureAuthError(new Error(r.error))

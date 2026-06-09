@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryEpics, createEpic, getCurrentUser } from '../_lib/azure';
+import { queryEpics, createEpic, getCurrentUser, mapWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
 import { AzureEpic } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -74,8 +74,10 @@ export default async function handler(
       // Get current user to auto-assign epics
       const currentUser = await getCurrentUser(auth.accessToken);
 
-      const results: CreateEpicResult[] = await Promise.all(
-        epics.map(async (epic): Promise<CreateEpicResult> => {
+      const results: CreateEpicResult[] = await mapWithConcurrency(
+        epics,
+        AZURE_CREATE_CONCURRENCY,
+        async (epic): Promise<CreateEpicResult> => {
           try {
             const azureEpic: AzureEpic = {
               title: epic.title,
@@ -103,7 +105,7 @@ export default async function handler(
               error: err instanceof Error ? err.message : 'Unknown error',
             };
           }
-        })
+        }
       );
 
       const hasAuthError = results.some(

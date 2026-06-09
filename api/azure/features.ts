@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryFeatures, queryFeaturesByEpic, createFeature, getCurrentUser } from '../_lib/azure';
+import { queryFeatures, queryFeaturesByEpic, createFeature, getCurrentUser, mapWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
 import { AzureFeature } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -87,8 +87,10 @@ export default async function handler(
       // Get current user to auto-assign features
       const currentUser = await getCurrentUser(auth.accessToken);
 
-      const results: CreateFeatureResult[] = await Promise.all(
-        features.map(async (feature): Promise<CreateFeatureResult> => {
+      const results: CreateFeatureResult[] = await mapWithConcurrency(
+        features,
+        AZURE_CREATE_CONCURRENCY,
+        async (feature): Promise<CreateFeatureResult> => {
           try {
             const azureFeature: AzureFeature = {
               title: feature.title,
@@ -117,7 +119,7 @@ export default async function handler(
               error: err instanceof Error ? err.message : 'Unknown error',
             };
           }
-        })
+        }
       );
 
       const hasAuthError = results.some(
