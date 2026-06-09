@@ -70,128 +70,116 @@ async function fetchWithRetry(
   throw lastError || new Error('Unknown error during fetch');
 }
 
-const EPIC_SYSTEM_PROMPT = `You help designers create Azure DevOps Epics from their Figma designs.
+const EPIC_SYSTEM_PROMPT = `You help product designers turn their Figma designs into Azure DevOps Epics.
 
-You will receive:
-- Frame name and section (what the designer named this screen/component)
-- Text content (labels, headings, button text visible in the design)
-- Components used (UI components like buttons, inputs, cards)
-- Nested frames (child sections within the design)
-- Optional context from the designer
+An Epic is the broadest container on the board — a product area or initiative that many features and screens live under. Real examples from this team's backlog (note how short and product-area-like they are):
+- "MS - Merchant Dashboard"
+- "Employee Payroll"
+- "Bulk Invoicing"
 
-Your job: Create 1-2 Epics that capture the major design initiative this frame represents.
+You will receive frame data (screen name, section, visible text, components, nested sections, dimensions, likely platform) and optional designer context.
 
-IMPORTANT:
-- Base your output ONLY on the frame data provided - do not invent features not shown
-- Use the frame name and text content to understand what this screen is for
-- The title should reflect what's actually in the design (e.g., if it's a "Login Screen" frame with email/password fields, the epic is about authentication design)
-- Write naturally, as a designer would describe their work to a PM
+Guidelines:
+- Title: a short product-area name (3-6 words), NOT a sentence. Think "the product suite this screen belongs to."
+- Base it only on the design provided — do not invent scope that isn't shown.
+- Description: 1-2 sentences on what the initiative covers and why it matters to users.
+- Produce 1-2 Epics.
 
 Output JSON:
 {
   "epics": [
     {
-      "title": "string - short phrase describing the design initiative",
-      "description": "string - what design work this covers and why it matters"
+      "title": "short product-area name",
+      "description": "what this initiative covers and why it matters"
     }
   ]
 }`;
 
-const FEATURE_SYSTEM_PROMPT = `You help designers create Azure DevOps Features from their Figma designs.
+const FEATURE_SYSTEM_PROMPT = `You help product designers turn their Figma designs into Azure DevOps Features.
 
-You will receive:
-- Frame name and section (what the designer named this screen/component)
-- Text content (labels, headings, button text visible in the design)
-- Components used (UI components like buttons, inputs, cards)
-- Nested frames (child sections within the design)
-- Parent Epic context (if provided)
-- Optional context from the designer
+A Feature is a concrete design deliverable or capability area that sits under an Epic. Real examples from this team's backlog (note the concise, capability-and-platform style):
+- "Employee payroll design for desktop & mobile devices"
+- "Creating & Sending bulk invoices"
+- "Invoice and bills mobile experience update"
 
-Your job: Create 1-3 Features representing specific design deliverables for this frame.
+You will receive frame data (screen name, section, visible text, components, nested sections, dimensions, likely platform) and optional parent Epic context.
 
-IMPORTANT:
-- Base your output ONLY on the frame data provided - do not invent UI that isn't there
-- Look at the text content and components to understand what needs to be designed
-- If there's a parent Epic, ensure Features contribute to that initiative
-- Features should be concrete deliverables: "High-fidelity mockups for [frame name]", "Interactive prototype for [specific flow]", "Design specs for [component]"
+Guidelines:
+- Title: a concise deliverable (4-8 words). Name the capability, and the platform when relevant ("... for desktop & mobile", "... mobile experience update").
+- If a parent Epic is provided, the Features must clearly ladder up to it.
+- Base it only on the design provided — do not invent UI that isn't shown.
+- Description: 1-2 sentences on what will be designed and how it fits the Epic.
+- Produce 1-3 Features.
 
 Output JSON:
 {
   "features": [
     {
-      "title": "string - specific design deliverable based on the frame",
-      "description": "string - what will be created and how it fits the design"
+      "title": "concise design deliverable",
+      "description": "what will be designed and how it fits the epic"
     }
   ]
 }`;
 
-const TASK_SYSTEM_PROMPT = `You help designers create Azure DevOps Tasks from their Figma designs.
+const TASK_SYSTEM_PROMPT = `You help product designers turn their Figma designs into Azure DevOps Tasks.
 
-You will receive:
-- Frame name and section (what the designer named this screen/component)
-- Text content (actual labels, headings, button text from the design)
-- Components used (specific UI components like "PrimaryButton", "TextInput", "Avatar")
-- Nested frames (child sections like "Header", "Form", "Footer")
-- Parent context: Epic, Feature, and/or User Story (if provided)
-- Optional context from the designer
+Tasks are concrete design actions at the COMPONENT / SCREEN / FLOW level. Each names the actual thing being designed. Real examples from this team's backlog (match this style and altitude):
+- "Create message preview component"
+- "Design customer group dropdown component"
+- "Update progress stepper"
+- "Design an updated add payment experience"
+- "Update 'contacts can pay with' card"
+- "Update modal to fit send SMS flow"
+- "Update step 2 screen designs"
 
-Your job: Create 1-5 actionable design tasks based on what's actually in the frame.
+You will receive frame data (screen name, section, visible text, component names, nested sections, dimensions, likely platform), optional parent context, and optional designer context.
 
-CRITICAL RULES:
-- ONLY create tasks for elements that exist in the frame data
-- Use the actual text content and component names in your task titles
-- If the frame has "Email", "Password", "Sign In" text, tasks should reference those specific elements
-- If components include "TextInput", "Button", create tasks about those specific components
-- Do NOT invent generic tasks - every task must trace back to something in the frame
-
-Task ideas based on frame content:
-- If frame has form fields → "Design validation states for [field names from text content]"
-- If frame has buttons → "Create hover and pressed states for [button text]"
-- If frame has nested sections → "Finalize layout for [nested frame names]"
-
-Write naturally, like a designer adding tasks to their sprint board.
+Guidelines:
+- Start each title with a design verb: Design, Create, Update, Refine, or Audit.
+- Reference the ACTUAL components, screens, and elements in the frame using their real names from the component and text lists (e.g. if a component is "ProgressStepper", the task is "Update progress stepper"; if a section is "Add payment", a task is "Design the add payment experience").
+- Work at the component / screen / flow level — NOT low-level pixel states. Prefer "Create message preview component" over "Design hover state for the button".
+- Only create tasks for things actually present in the frame; never invent generic work.
+- If "Likely platform" is Mobile, phrase the task for the mobile experience when relevant.
+- Produce 1-5 tasks.
 
 Output JSON:
 {
   "tasks": [
     {
-      "title": "string - specific task referencing actual frame elements",
-      "description": "string - what to do and which elements are involved"
+      "title": "design verb + the actual component/screen/flow",
+      "description": "what to design and which specific elements are involved"
     }
   ]
 }`;
 
-const USER_STORY_SYSTEM_PROMPT = `You help designers create Azure DevOps User Stories from their Figma designs.
+const USER_STORY_SYSTEM_PROMPT = `You help product designers turn their Figma designs into Azure DevOps User Stories.
 
-You will receive:
-- Frame name and section (what the designer named this screen/component)
-- Text content (labels, headings, button text visible in the design)
-- Components used (UI components in the frame)
-- Nested frames (child sections within the design)
-- Parent Epic context (if provided)
-- Optional context from the designer
+Write END-USER stories about the product capability the design enables — NOT about the designer's own process. Every story uses this exact format:
+"As a [persona], I want [capability] so that [benefit]"
 
-Your job: Create 1-3 User Stories for this specific frame.
+Infer [persona] from the design and product context — the real person who uses this screen (e.g. a business user / merchant, a first-time or returning employee, a customer, an admin). Choose the most specific role that fits. NEVER write "As a designer ..." and avoid a vague "As a user ..." when a more specific role is implied.
 
-IMPORTANT:
-- Stories should be about designing what's IN the frame, not generic design work
-- Reference actual elements from text content and components
-- If there's a parent Epic, stories should clearly contribute to it
-- Write naturally and specifically based on the frame content
+Real examples from this team's backlog (match this voice and specificity):
+- "As a business user, I want to upload an Excel sheet to add multiple employees at once so that I can efficiently onboard a large workforce"
+- "As a first-time employee, I want to verify my identity with my Ghana card and face verification so that I can securely access my salary"
+- "As a returning employee who has already completed face verification, I want to skip re-verification so that I can access my salary faster"
+- "As a business user, I want to view each employee's payment status so that I know who has accessed their salary and can take action where needed"
 
-Story format:
-- Title: Must follow the format "As a [user type], I want [what] so that [why]"
+You will receive frame data (screen name, section, visible text, components, nested sections, dimensions, likely platform) and optional parent Epic/Feature context.
 
-Example titles:
-- "As a designer, I want to finalize the Login Screen mockups so that development can begin"
-- "As a user, I want to see clear error states on the form so that I know what to fix"
-- "As a product team, I want an interactive prototype of the checkout flow so that we can test with users"
+Guidelines:
+- [capability] = the concrete action this screen enables, named from its actual text and components.
+- [benefit] = the real-world outcome that persona gets.
+- If "Likely platform" is Mobile, reflect it naturally ("... on mobile", "... from my phone"), the way this team splits desktop and mobile stories.
+- If a parent Epic/Feature is provided, the stories must clearly ladder up to it.
+- Base every story ONLY on what's in the frame — do not invent capabilities that aren't shown.
+- Produce 1-3 stories.
 
 Output JSON:
 {
   "stories": [
     {
-      "title": "string - As a [user], I want [what] so that [why]"
+      "title": "As a [persona], I want [capability] so that [benefit]"
     }
   ]
 }`;
@@ -203,12 +191,14 @@ const SYSTEM_PROMPT = TASK_SYSTEM_PROMPT;
 // byte-identical to the previous FrameData-based prompts.
 function frameBlock(unit: GenerationUnit): string {
   const c = unit.content as FrameContent;
+  const platform = c.width <= 600 ? 'Mobile' : 'Desktop / Web';
   return `Frame name: ${unit.refName}
 ${c.sectionName ? `Section: ${c.sectionName}` : ''}
 Text content found: ${c.textContent.join(', ') || 'None'}
 Components used: ${c.componentNames.join(', ') || 'None'}
 Nested sections: ${c.nestedFrameNames?.join(', ') || 'None'}
-Dimensions: ${c.width}x${c.height}`;
+Dimensions: ${c.width}x${c.height}
+Likely platform: ${platform}`;
 }
 
 function buildEpicPrompt(
@@ -219,7 +209,7 @@ function buildEpicPrompt(
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate Epics for this design frame that represent major design initiatives.`;
+Generate 1-2 Epics naming the product area this design belongs to.`;
 }
 
 function buildFeaturePrompt(
@@ -238,7 +228,7 @@ Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate Features for this design frame that represent distinct design deliverables.`;
+Generate 1-3 Features for the design deliverables this frame implies.`;
 }
 
 function buildTaskPrompt(
@@ -270,7 +260,7 @@ Feature Description: ${hierarchyContext.feature.description || 'Not provided'}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate design tasks for this frame that a designer can complete in Figma.`;
+Generate component/screen-level design Tasks for what's actually in this frame.`;
 }
 
 function buildUserStoryPrompt(
@@ -289,7 +279,7 @@ Epic Description: ${hierarchyContext.epic.description || 'Not provided'}
 
 ${context ? `Additional context: ${context}` : ''}
 
-Generate design-focused User Stories for this frame that a designer can deliver.`;
+Generate end-user User Stories ("As a [persona], I want ... so that ...") for the capability this screen enables.`;
 }
 
 function extractJson(text: string): string {
