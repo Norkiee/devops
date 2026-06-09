@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getAuthUrl, pollAuthResult, refreshToken } from '../services/api';
+import { getAuthUrl, pollAuthResult, refreshToken, logoutSession } from '../services/api';
 import { initStorage, getStorage, setStorage, onStorageChange } from '../services/storage';
 
 interface UseAzureAuthResult {
@@ -137,11 +137,15 @@ export function useAzureAuth(): UseAzureAuthResult {
   }, [sessionId]);
 
   const logout = useCallback(() => {
+    // Revoke the server-side refresh token (best-effort), then clear locally.
+    if (sessionId) {
+      void logoutSession(sessionId);
+    }
     setAccessToken(null);
     setSessionId(null);
     setAuthError(null);
     setStorage({ accessToken: undefined, sessionId: undefined });
-  }, []);
+  }, [sessionId]);
 
   const clearAuthError = useCallback(() => {
     setAuthError(null);

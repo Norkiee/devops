@@ -144,6 +144,15 @@ export function App(): React.ReactElement {
     setScreen('connect-azure');
   }, [auth]);
 
+  // Sign out from the Home screen: same cleanup, but stay on Home.
+  const handleLogout = useCallback(() => {
+    auth.logout();
+    setAzureOrg('');
+    setAzureProjectId('');
+    setHierarchyContext({});
+    setScreen('home');
+  }, [auth]);
+
   const handleGenerate = useCallback(
     async (context?: string) => {
       setScreen('generating');
@@ -552,6 +561,8 @@ export function App(): React.ReactElement {
           frameCount={frameCount}
           sectionCount={sectionCount}
           onContinue={handleContinueFromHome}
+          isAuthenticated={auth.isAuthenticated}
+          onLogout={handleLogout}
         />
       )}
 

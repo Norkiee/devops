@@ -5,6 +5,8 @@ interface HomeScreenProps {
   frameCount: number;
   sectionCount?: number;
   onContinue: () => void;
+  isAuthenticated?: boolean;
+  onLogout?: () => void;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -36,6 +38,8 @@ export function HomeScreen({
   frameCount,
   sectionCount = 0,
   onContinue,
+  isAuthenticated = false,
+  onLogout,
 }: HomeScreenProps): React.ReactElement {
   useEffect(() => {
     parent.postMessage(
@@ -65,13 +69,18 @@ export function HomeScreen({
           Select frames or sections in Figma to generate Azure DevOps work items
         </p>
       </div>
-      {frameCount > 0 && (
-        <div style={{ width: '100%' }}>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {frameCount > 0 && (
           <Button onClick={onContinue} fullWidth>
             {getButtonText()}
           </Button>
-        </div>
-      )}
+        )}
+        {isAuthenticated && onLogout && (
+          <Button onClick={onLogout} variant="text" fullWidth>
+            Sign out of Azure DevOps
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

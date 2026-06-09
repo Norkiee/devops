@@ -162,6 +162,19 @@ export async function refreshToken(
   return data.accessToken;
 }
 
+// Revokes the server-side refresh token for this session. Best-effort: never
+// throws, so signing out can't be blocked by a backend hiccup.
+export async function logoutSession(sessionId: string): Promise<void> {
+  try {
+    await request('/api/azure/refresh?action=logout', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+  } catch {
+    // Intentionally swallowed — local sign-out proceeds regardless.
+  }
+}
+
 export async function fetchOrgs(
   accessToken: string
 ): Promise<string[]> {

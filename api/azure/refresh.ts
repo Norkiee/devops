@@ -38,6 +38,19 @@ export default async function handler(
     return;
   }
 
+  // Server-side logout: revoke the stored refresh token. No env vars or token
+  // exchange needed. Folded into this function (not a new endpoint) to stay
+  // under the Hobby 12-function deployment cap.
+  if (req.query.action === 'logout') {
+    try {
+      await kvDel(`session:${sessionId}`);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   let envVars: { clientId: string; clientSecret: string; resourceId: string };
   try {
     envVars = getRequiredEnvVars();
