@@ -1,5 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTask, getCurrentUser } from '../_lib/azure';
+import { createTask, getCurrentUser, settleWithConcurrency } from '../_lib/azure';
+
+// Cap in-flight creates so a large batch doesn't burst Azure's rate limit.
+const AZURE_CREATE_CONCURRENCY = 5;
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -31,10 +34,12 @@ export default async function handler(
     // Get current user to auto-assign tasks
     const currentUser = await getCurrentUser(auth.accessToken);
 
-    // Use Promise.allSettled to capture both successes and failures
-    // This prevents losing successful results when some tasks fail
-    const settledResults = await Promise.allSettled(
-      tasks.map(async (task) => {
+    // Bounded concurrency + per-task settle: captures both successes and
+    // failures without bursting Azure's rate limit or losing partial results.
+    const settledResults = await settleWithConcurrency(
+      tasks,
+      AZURE_CREATE_CONCURRENCY,
+      async (task) => {
         const result = await createTask(
           {
             org: auth.org,
@@ -55,7 +60,7 @@ export default async function handler(
           azureTaskId: result.id,
           taskUrl: result.url,
         };
-      })
+      }
     );
 
     // Check if any auth errors occurred (should trigger session expired)

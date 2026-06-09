@@ -3,6 +3,52 @@ import { AzureProject, AzureStory, AzureTask, AzureUserStory, AzureWorkItemDetai
 const AZURE_API_VERSION = '7.1';
 const FETCH_TIMEOUT_MS = 30000; // 30 second timeout
 
+// Azure DevOps throttles bursts with 429 (and occasionally 503). Both mean the
+// request was NOT processed, so retrying is safe — no risk of duplicate creates.
+const RETRYABLE_STATUS = new Set([429, 503]);
+const MAX_AZURE_RETRIES = 4;
+const BASE_RETRY_DELAY_MS = 500;
+const MAX_RETRY_DELAY_MS = 10000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter) {
+    const secs = Number(retryAfter);
+    if (!Number.isNaN(secs) && secs >= 0) {
+      return Math.min(secs * 1000, MAX_RETRY_DELAY_MS);
+    }
+  }
+  return Math.min(BASE_RETRY_DELAY_MS * 2 ** attempt, MAX_RETRY_DELAY_MS);
+}
+
+// Runs `worker` over items with a bounded number of in-flight calls, returning
+// allSettled-style results. Keeps bulk creates from bursting Azure's rate limit.
+export async function settleWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let next = 0;
+  async function run(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: 'fulfilled', value: await worker(items[i], i) };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, run);
+  await Promise.all(lanes);
+  return results;
+}
+
 interface AzureApiOptions {
   org: string;
   accessToken: string;
@@ -40,27 +86,41 @@ async function azureFetch(
   accessToken: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-    clearTimeout(timeoutId);
-    return processResponse(response);
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new TimeoutError(`Request timed out after ${FETCH_TIMEOUT_MS}ms: ${url}`);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+      clearTimeout(timeoutId);
+
+      // Retry on throttling (429) / transient unavailability (503), honoring
+      // Retry-After. These statuses mean the request was not applied, so a
+      // retry cannot create a duplicate work item.
+      if (RETRYABLE_STATUS.has(response.status) && attempt < MAX_AZURE_RETRIES) {
+        const delay = retryDelayMs(response, attempt);
+        // Drain the body so the connection can be reused.
+        await response.text().catch(() => undefined);
+        await sleep(delay);
+        continue;
+      }
+
+      return processResponse(response);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new TimeoutError(`Request timed out after ${FETCH_TIMEOUT_MS}ms: ${url}`);
+      }
+      throw error;
     }
-    throw error;
   }
 }
 
