@@ -18,7 +18,10 @@ import {
   HierarchyContext,
 } from '../types';
 
-const API_URL = 'https://devops-psi.vercel.app';
+// Injected at build time by webpack's DefinePlugin (see webpack.config.js).
+// Override with TASKLIST_API_URL=https://your-project.vercel.app npm run build
+declare const __API_URL__: string;
+const API_URL = __API_URL__;
 
 // Custom error class for authentication failures
 export class AuthError extends Error {

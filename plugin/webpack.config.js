@@ -1,7 +1,12 @@
 const path = require('path');
+const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+// Backend base URL is baked in at build time. Override per environment with:
+//   TASKLIST_API_URL=https://your-project.vercel.app npm run build
+const API_URL = process.env.TASKLIST_API_URL || 'https://devops-psi.vercel.app';
 
 module.exports = (env, argv) => ({
   entry: {
@@ -39,5 +44,8 @@ module.exports = (env, argv) => ({
     }),
     new HtmlInlineScriptPlugin(),
     new MiniCssExtractPlugin(),
+    new webpack.DefinePlugin({
+      __API_URL__: JSON.stringify(API_URL),
+    }),
   ],
 });
