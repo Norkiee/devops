@@ -3,6 +3,7 @@ import { generateWorkItemsForUnit } from './_lib/claude';
 import { framesToGenerationInput } from './_lib/sources/frames';
 import { FrameData, FrameWorkItems, WorkItemType, HierarchyContext } from './_lib/types';
 import { handleCors } from './_lib/auth';
+import { handleFeedback } from './_lib/feedback';
 import {
   safeMemory,
   getOrCreateFlows,
@@ -120,6 +121,13 @@ export default async function handler(
   res: VercelResponse
 ): Promise<void> {
   if (handleCors(req, res)) return;
+
+  // /api/feedback is rewritten here as ?action=feedback so both memory-write
+  // endpoints share one serverless function (Hobby plan: 12-function cap).
+  if (req.query.action === 'feedback') {
+    await handleFeedback(req, res);
+    return;
+  }
 
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });

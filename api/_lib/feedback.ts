@@ -1,26 +1,27 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleCors } from './_lib/auth';
 import {
   safeMemory,
   recordFeedback,
   FeedbackUpdate,
   FeedbackStatus,
   FEEDBACK_STATUSES,
-} from './_lib/db';
+} from './db';
 
 const MAX_ITEMS = 500;
 const MAX_FEEDBACK_LENGTH = 2000;
 
-// POST /api/feedback
 // Records what happened to previously-proposed items after a submit pass.
 // Best-effort: invalid/partial input is filtered out and storage failures never
 // surface as errors — the plugin should never break because memory hiccuped.
-export default async function handler(
+//
+// Reached via POST /api/feedback, which vercel.json rewrites to
+// /api/generate?action=feedback so both memory writes share one serverless
+// function (Hobby plan caps deployments at 12 functions). CORS is already
+// handled by the generate handler before this runs.
+export async function handleFeedback(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  if (handleCors(req, res)) return;
-
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;

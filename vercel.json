@@ -1,10 +1,12 @@
 {
   "functions": {
     "api/**/*.ts": {
-      "memory": 1024,
       "maxDuration": 60
     }
   },
+  "rewrites": [
+    { "source": "/api/feedback", "destination": "/api/generate?action=feedback" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
