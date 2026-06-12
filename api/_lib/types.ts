@@ -122,7 +122,9 @@ export interface AzureTask {
   description: string;
   parentStoryId: number;
   tags: string[];
-  state: 'New';
+  // Process-specific state name. Agile→Active, Basic→Doing, Scrum→In Progress.
+  // Resolved at runtime per project (see getTaskInProgressState), not hardcoded.
+  state: string;
   assignedTo?: string;
 }
 

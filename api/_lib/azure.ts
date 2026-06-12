@@ -289,17 +289,37 @@ export async function getTags(
   return data.value.map((t) => t.name);
 }
 
+// Resolve the "in-progress" state name for the Task type in this project. The
+// name varies by process template (Agile→Active, Basic→Doing, Scrum→In
+// Progress), so we read the type's states and pick the one in the InProgress
+// category rather than hardcoding a value that breaks on non-Agile projects.
+// Falls back to 'Active' if the states API is unavailable.
+export async function getTaskInProgressState(
+  opts: AzureApiOptions & { projectId: string }
+): Promise<string> {
+  try {
+    const response = await azureFetch(
+      `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitemtypes/Task/states?api-version=${AZURE_API_VERSION}`,
+      opts.accessToken
+    );
+    const data = (await response.json()) as {
+      value: Array<{ name: string; category?: string; stateCategory?: string }>;
+    };
+    const inProgress = data.value.find(
+      (s) => (s.stateCategory || s.category) === 'InProgress'
+    );
+    return inProgress?.name || 'Active';
+  } catch {
+    return 'Active';
+  }
+}
+
 export async function createTask(
   opts: AzureApiOptions & { projectId: string },
   task: AzureTask
 ): Promise<{ id: number; url: string }> {
   const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: task.title },
-    {
-      op: 'add',
-      path: '/fields/System.Description',
-      value: task.description,
-    },
     {
       op: 'add',
       path: '/fields/System.Tags',
@@ -314,6 +334,27 @@ export async function createTask(
       },
     },
   ];
+
+  // Only set Description when present. A JSON-patch "add" with an undefined
+  // value serializes without the `value` key, which Azure rejects as
+  // "Value cannot be null" — so tasks parsed from a tasklist (no description)
+  // must omit the field entirely rather than send a null one.
+  if (task.description) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.Description',
+      value: task.description,
+    });
+  }
+
+  // Set the work item state when provided (e.g. the process's in-progress state).
+  if (task.state) {
+    patchDoc.push({
+      op: 'add',
+      path: '/fields/System.State',
+      value: task.state,
+    });
+  }
 
   // Add assigned user if provided
   if (task.assignedTo) {

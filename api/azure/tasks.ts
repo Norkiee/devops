@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTask, getCurrentUser, settleWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
+import { createTask, getCurrentUser, getTaskInProgressState, settleWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -31,6 +31,13 @@ export default async function handler(
     // Get current user to auto-assign tasks
     const currentUser = await getCurrentUser(auth.accessToken);
 
+    // Resolve the process-correct in-progress state once for the whole batch.
+    const inProgressState = await getTaskInProgressState({
+      org: auth.org,
+      accessToken: auth.accessToken,
+      projectId,
+    });
+
     // Bounded concurrency + per-task settle: captures both successes and
     // failures without bursting Azure's rate limit or losing partial results.
     const settledResults = await settleWithConcurrency(
@@ -48,7 +55,7 @@ export default async function handler(
             description: task.description,
             parentStoryId: task.parentStoryId,
             tags: task.tags,
-            state: 'New',
+            state: inProgressState,
             assignedTo: currentUser.emailAddress,
           }
         );

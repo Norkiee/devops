@@ -21,13 +21,11 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { generateWorkItems, createTasks, createUserStories, createEpics, createFeatures, recordFeedback, FeedbackItem } from './services/api';
+import { createTasks, createUserStories, createEpics, createFeatures, recordFeedback, FeedbackItem } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
-import { WorkItemTypeScreen } from './screens/WorkItemTypeScreen';
-import { ContextScreen } from './screens/ContextScreen';
-import { GeneratingScreen } from './screens/GeneratingScreen';
+import { ParseTasklistScreen, ParseResult } from './screens/ParseTasklistScreen';
 import { ReviewScreen } from './screens/ReviewScreen';
 import { SubmittingScreen } from './screens/SubmittingScreen';
 import { SuccessScreen } from './screens/SuccessScreen';
@@ -45,10 +43,9 @@ export function App(): React.ReactElement {
   const { storage, updateStorage } = usePluginStorage();
   const containerRef = useAutoResize();
 
-  // Work item type and hierarchy
-  const [workItemType, setWorkItemType] = useState<WorkItemType>(
-    storage.lastWorkItemType || 'UserStory'
-  );
+  // Work item type and hierarchy. Plugin 1 (team) only creates Tasks — titles
+  // come straight from the parsed tasklist, so there is no type-selection step.
+  const [workItemType] = useState<WorkItemType>('Task');
   const [hierarchyContext, setHierarchyContext] = useState<HierarchyContext>({});
   const [availableTypes, setAvailableTypes] = useState<WorkItemTypeInfo[]>([]);
 
@@ -73,9 +70,9 @@ export function App(): React.ReactElement {
 
   const handleContinueFromHome = useCallback(() => {
     requestFrames();
-    // Go to work item type selection first
-    setScreen('work-item-type');
-  }, [requestFrames]);
+    // Task-only flow: connect to Azure (if needed), then pick project + parent.
+    setScreen(auth.isAuthenticated ? 'select-project' : 'connect-azure');
+  }, [requestFrames, auth.isAuthenticated]);
 
   const handleConnectAzure = useCallback(() => {
     auth.startAuth(() => {
@@ -116,18 +113,6 @@ export function App(): React.ReactElement {
     [updateStorage]
   );
 
-  const handleSelectWorkItemType = useCallback((type: WorkItemType) => {
-    setWorkItemType(type);
-    updateStorage({ lastWorkItemType: type });
-
-    // Need to connect to Azure first if not authenticated
-    if (!auth.isAuthenticated) {
-      setScreen('connect-azure');
-    } else {
-      setScreen('select-project');
-    }
-  }, [updateStorage, auth.isAuthenticated]);
-
   const handleSessionExpired = useCallback(() => {
     auth.logout();
     setScreen('connect-azure');
@@ -153,38 +138,31 @@ export function App(): React.ReactElement {
     setScreen('home');
   }, [auth]);
 
-  const handleGenerate = useCallback(
-    async (context?: string) => {
-      setScreen('generating');
-      setCompletedFrameIds(new Set());
-      setError(null);
+  // Plugin 1 (team): build the FrameWorkItems shape ReviewScreen already
+  // consumes directly from the parsed tasklist lines — no Claude call. The work
+  // item id encodes the dedup hash (`task-<hash>`) so submit can stamp it back
+  // onto the frame. Lines already created on a prior run come in unselected.
+  const handleParsed = useCallback((result: ParseResult) => {
+    const fwi: FrameWorkItems = {
+      frameId: result.frameId,
+      frameName: result.frameName,
+      workItems: result.items.map((item) => ({
+        id: `task-${item.hash}`,
+        title: item.title,
+        selected: !item.alreadyCreated,
+      })),
+    };
+    setFrameWorkItems([fwi]);
+    setCompletedFrameIds(new Set([result.frameId]));
 
-      try {
-        const { frameWorkItems: generated } = await generateWorkItems(
-          frames,
-          workItemType,
-          context,
-          hierarchyContext,
-          fileKey
-        );
-        setFrameWorkItems(generated);
-        setCompletedFrameIds(new Set(generated.map((fwi) => fwi.frameId)));
-        // Snapshot originals for later edit detection on submit.
-        const originals = new Map<string, { title: string; description?: string }>();
-        for (const fwi of generated) {
-          for (const item of fwi.workItems) {
-            originals.set(item.id, { title: item.title, description: item.description });
-          }
-        }
-        originalItemsRef.current = originals;
-        setScreen('review');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Generation failed');
-        setScreen('context');
-      }
-    },
-    [frames, workItemType, hierarchyContext, fileKey]
-  );
+    const originals = new Map<string, { title: string; description?: string }>();
+    for (const item of fwi.workItems) {
+      originals.set(item.id, { title: item.title, description: item.description });
+    }
+    originalItemsRef.current = originals;
+    setError(null);
+    setScreen('review');
+  }, []);
 
   const getTotalWorkItemCount = useCallback(() => {
     return frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
@@ -275,6 +253,27 @@ export function App(): React.ReactElement {
     },
     [getSelectedWorkItems, frameWorkItems]
   );
+
+  // Plugin 1 (team): stamp the dedup hash → Azure id for each successfully
+  // created task onto the tasklist frame (via main.ts), so a re-run skips them.
+  // The hash is encoded in the work item id as `task-<hash>`.
+  const stampDedup = useCallback((submitResults: SubmitResult[]) => {
+    const pairs = submitResults
+      .filter(
+        (r): r is CreateTaskResult =>
+          'taskId' in r && r.success && typeof r.azureTaskId === 'number'
+      )
+      .map((r) => ({
+        hash: r.taskId.replace(/^task-/, ''),
+        azureId: r.azureTaskId as number,
+      }));
+    if (pairs.length > 0) {
+      parent.postMessage(
+        { pluginMessage: { type: 'stamp-dedup', data: pairs } },
+        '*'
+      );
+    }
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const selectedItems = getSelectedWorkItems();
@@ -369,6 +368,7 @@ export function App(): React.ReactElement {
 
       setResults(submitResults);
       sendFeedback(submitResults);
+      stampDedup(submitResults);
       const allIds = new Set(selectedItems.map((item) => item.id));
       setSubmittedIds(allIds);
 
@@ -392,6 +392,7 @@ export function App(): React.ReactElement {
     azureProjectId,
     handleSessionExpired,
     sendFeedback,
+    stampDedup,
   ]);
 
   const handleRetry = useCallback(async () => {
@@ -490,6 +491,7 @@ export function App(): React.ReactElement {
       });
       setResults(updatedResults);
       sendFeedback(updatedResults);
+      stampDedup(retryResults);
 
       const allIds = new Set(selectedItems.map((item) => item.id));
       setSubmittedIds(allIds);
@@ -515,6 +517,7 @@ export function App(): React.ReactElement {
     azureProjectId,
     handleSessionExpired,
     sendFeedback,
+    stampDedup,
   ]);
 
   const handleViewInAzure = useCallback(() => {
@@ -566,16 +569,6 @@ export function App(): React.ReactElement {
         />
       )}
 
-      {screen === 'work-item-type' && (
-        <WorkItemTypeScreen
-          frameCount={frameCount}
-          sectionCount={sectionCount}
-          savedWorkItemType={storage.lastWorkItemType}
-          onSelect={handleSelectWorkItemType}
-          onBack={() => setScreen('home')}
-        />
-      )}
-
       {screen === 'connect-azure' && (
         <ConnectAzureScreen
           frameCount={frameCount}
@@ -583,7 +576,7 @@ export function App(): React.ReactElement {
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-project')}
           onDisconnect={handleDisconnect}
-          onBack={() => setScreen('work-item-type')}
+          onBack={() => setScreen('home')}
         />
       )}
 
@@ -600,25 +593,15 @@ export function App(): React.ReactElement {
           onContinue={handleProjectSelected}
           onSessionExpired={handleSessionExpired}
           onRefreshToken={auth.refresh}
-          onBack={() => setScreen('work-item-type')}
+          onBack={() => setScreen('home')}
         />
       )}
 
       {screen === 'context' && (
-        <ContextScreen
-          frames={frames}
-          workItemType={workItemType}
+        <ParseTasklistScreen
           parentTitle={parentTitle}
-          onGenerate={handleGenerate}
+          onParsed={handleParsed}
           onBack={() => setScreen('select-project')}
-        />
-      )}
-
-      {screen === 'generating' && (
-        <GeneratingScreen
-          frames={frames}
-          workItemType={workItemType}
-          completedFrameIds={completedFrameIds}
         />
       )}
 

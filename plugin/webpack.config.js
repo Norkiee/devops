@@ -6,7 +6,7 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 // Backend base URL is baked in at build time. Override per environment with:
 //   TASKLIST_API_URL=https://your-project.vercel.app npm run build
-const API_URL = process.env.TASKLIST_API_URL || 'https://devops-psi.vercel.app';
+const API_URL = process.env.TASKLIST_API_URL || 'https://devops-omega-tan.vercel.app';
 
 module.exports = (env, argv) => ({
   entry: {

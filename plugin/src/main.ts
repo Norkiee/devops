@@ -1,3 +1,5 @@
+import { parseTasklist } from './parseTasklist';
+
 interface FrameData {
   id: string;
   name: string;
@@ -7,6 +9,34 @@ interface FrameData {
   nestedFrameNames: string[];
   width: number;
   height: number;
+}
+
+// Plugin 1 (team) dedup: a map of normalized-line hash → Azure work item id is
+// stamped onto the tasklist frame's pluginData so a re-run skips already-created
+// tasks. The frame we stamp is resolved during parse and remembered here so the
+// later stamp-dedup message writes back to the same node.
+const DEDUP_KEY = 'tasklistDedup';
+let dedupNodeId: string | null = null;
+
+// Resolve the node whose pluginData holds the dedup ledger: the nearest FRAME
+// at or above the first selected node, falling back to the selection itself.
+function resolveDedupNode(): SceneNode | null {
+  const sel = figma.currentPage.selection;
+  if (sel.length === 0) return null;
+  let node: BaseNode | null = sel[0];
+  while (node && node.type !== 'FRAME') {
+    node = node.parent;
+  }
+  return (node as SceneNode) || sel[0];
+}
+
+function readDedupMap(node: SceneNode): Record<string, number> {
+  try {
+    const raw = node.getPluginData(DEDUP_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch (e) {
+    return {};
+  }
 }
 
 interface SectionData {
@@ -134,6 +164,44 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
     // groups per-file.
     const fileKey = figma.fileKey || figma.root.id;
     figma.ui.postMessage({ type: 'selection', frames, sections, fileKey });
+  }
+
+  if (msg.type === 'parse-tasklist') {
+    const dedupNode = resolveDedupNode();
+    if (!dedupNode) {
+      figma.ui.postMessage({ type: 'parse-result', error: 'select-tasklist' });
+      return;
+    }
+    dedupNodeId = dedupNode.id;
+    const dedupMap = readDedupMap(dedupNode);
+    const parsed = parseTasklist(figma.currentPage.selection);
+    const items = parsed.map((t) => ({
+      title: t.title,
+      hash: t.hash,
+      alreadyCreated: Object.prototype.hasOwnProperty.call(dedupMap, t.hash),
+    }));
+    figma.ui.postMessage({
+      type: 'parse-result',
+      frameId: dedupNode.id,
+      frameName: dedupNode.name,
+      items,
+    });
+  }
+
+  if (msg.type === 'stamp-dedup') {
+    // Merge { hash → azureId } pairs onto the tasklist frame so re-runs skip
+    // these lines. Resolve the node by the id captured during parse.
+    const pairs = (msg.data as { hash: string; azureId: number }[]) || [];
+    const node = dedupNodeId
+      ? (figma.getNodeById(dedupNodeId) as SceneNode | null)
+      : null;
+    if (node && 'getPluginData' in node && pairs.length > 0) {
+      const map = readDedupMap(node);
+      for (const { hash, azureId } of pairs) {
+        if (hash && typeof azureId === 'number') map[hash] = azureId;
+      }
+      node.setPluginData(DEDUP_KEY, JSON.stringify(map));
+    }
   }
 
   if (msg.type === 'get-storage') {
