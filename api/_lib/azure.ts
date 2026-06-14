@@ -347,14 +347,11 @@ export async function createTask(
     });
   }
 
-  // Set the work item state when provided (e.g. the process's in-progress state).
-  if (task.state) {
-    patchDoc.push({
-      op: 'add',
-      path: '/fields/System.State',
-      value: task.state,
-    });
-  }
+  // NOTE: System.State is deliberately NOT set here. On create, Azure's rules
+  // engine validates State against the initial state's allowed values and
+  // rejects a jump straight to e.g. 'Active' ("not in the list of supported
+  // values") — even when that state is valid for the type. The work item must
+  // be created in its default state first, then transitioned (see below).
 
   // Add assigned user if provided
   if (task.assignedTo) {
@@ -378,6 +375,31 @@ export async function createTask(
     id: number;
     _links?: { html?: { href?: string } };
   };
+
+  // Transition to the requested state with a follow-up PATCH. Best-effort: a
+  // task created in its default state is still a success, so a failed
+  // transition is logged rather than failing the whole create.
+  if (task.state) {
+    try {
+      await azureFetch(
+        `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/${data.id}?api-version=${AZURE_API_VERSION}`,
+        opts.accessToken,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json-patch+json' },
+          body: JSON.stringify([
+            { op: 'add', path: '/fields/System.State', value: task.state },
+          ]),
+        }
+      );
+    } catch (err) {
+      console.error(
+        `Task ${data.id} created but transition to state '${task.state}' failed:`,
+        err
+      );
+    }
+  }
+
   return {
     id: data.id,
     url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
