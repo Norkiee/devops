@@ -143,10 +143,16 @@ export function App(): React.ReactElement {
   // item id encodes the dedup hash (`task-<hash>`) so submit can stamp it back
   // onto the frame. Lines already created on a prior run come in unselected.
   const handleParsed = useCallback((result: ParseResult) => {
+    // Surface new (not-yet-created) tasks at the top so they're easy to act on;
+    // already-created lines sink to the bottom. Stable sort keeps the original
+    // tasklist order within each group.
+    const ordered = [...result.items].sort(
+      (a, b) => Number(a.alreadyCreated) - Number(b.alreadyCreated)
+    );
     const fwi: FrameWorkItems = {
       frameId: result.frameId,
       frameName: result.frameName,
-      workItems: result.items.map((item) => ({
+      workItems: ordered.map((item) => ({
         id: `task-${item.hash}`,
         title: item.title,
         selected: !item.alreadyCreated,
