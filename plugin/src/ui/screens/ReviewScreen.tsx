@@ -109,9 +109,9 @@ export function ReviewScreen({
   );
   const newItems = allItems.filter((i) => !i.existing);
   const openItems = allItems.filter((i) => i.existing && !i.closed);
-  const closedItems = allItems.filter((i) => i.existing && i.closed);
 
-  const totalItems = allItems.length;
+  // Closed tasks are tracked for dedup but not shown in Review.
+  const totalItems = newItems.length + openItems.length;
   const createCount = newItems.filter((i) => i.selected).length;
   const closeCount = openItems.filter((i) => i.selected).length;
 
@@ -176,15 +176,6 @@ export function ReviewScreen({
       <div className="task-list">
         {newItems.length > 0 && renderSection('New tasks', 'new', newItems)}
         {openItems.length > 0 && renderSection('Open tasks', 'open', openItems)}
-        {closedItems.length > 0 && (
-          <div style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <span style={styles.sectionTitle}>Closed</span>
-              <span style={styles.itemCount}>{closedItems.length}</span>
-            </div>
-            <div style={styles.itemList}>{closedItems.map(renderCard)}</div>
-          </div>
-        )}
       </div>
 
       <div className="sticky-footer">
