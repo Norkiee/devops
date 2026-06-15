@@ -58,7 +58,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
     border: '1px solid #E6ECF0',
     fontSize: '13px',
-    fontWeight: 400,
+    fontWeight: 600,
     color: '#3D5263',
     fontFamily: 'inherit',
     outline: 'none',
@@ -94,7 +94,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   existingTitle: {
     fontSize: '13px',
-    fontWeight: 400,
+    fontWeight: 600,
     color: '#3D5263',
     lineHeight: '1.4',
   },
@@ -186,11 +186,6 @@ export function WorkItemCard({
           />
           <div style={styles.content}>
             <div style={styles.existingTitle}>{title}</div>
-            <div style={styles.badgeRow}>
-              <span style={{ ...styles.badge, background: '#D9F7F3', color: '#0A6B60' }}>
-                In Azure
-              </span>
-            </div>
           </div>
         </div>
       </div>
