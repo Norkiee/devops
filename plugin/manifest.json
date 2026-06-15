@@ -6,7 +6,11 @@
   "ui": "dist/ui.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["*"],
-    "reasoning": "Connects to Vercel backend API and Azure DevOps OAuth endpoints"
+    "allowedDomains": [
+      "https://devops-omega-tan.vercel.app",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
+    ],
+    "reasoning": "Calls the Tasklist backend for Azure DevOps OAuth and work-item APIs, and loads the Sora font from Google Fonts."
   }
 }
