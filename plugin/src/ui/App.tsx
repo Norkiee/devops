@@ -71,6 +71,8 @@ export function App(): React.ReactElement {
   // Submission state
   const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<SubmitResult[]>([]);
+  // Which action the Submitting/Success screens are reporting on.
+  const [action, setAction] = useState<'create' | 'close'>('create');
 
   // Flow: home → work-item-type → connect-azure → select-project → select-parent → context → generating → review → submitting → success
 
@@ -334,6 +336,7 @@ export function App(): React.ReactElement {
     const selectedItems = getSelectedWorkItems().filter((i) => !i.existing);
     if (selectedItems.length === 0) return;
 
+    setAction('create');
     setScreen('submitting');
     setSubmittedIds(new Set());
 
@@ -457,6 +460,7 @@ export function App(): React.ReactElement {
     );
     if (closeable.length === 0) return;
 
+    setAction('close');
     setScreen('submitting');
     setSubmittedIds(new Set());
 
@@ -715,6 +719,7 @@ export function App(): React.ReactElement {
         <SubmittingScreen
           tasks={getTasksForSubmitting()}
           workItemType={workItemType}
+          action={action}
           completedTaskIds={submittedIds}
         />
       )}
@@ -723,6 +728,7 @@ export function App(): React.ReactElement {
         <SuccessScreen
           results={results}
           workItemType={workItemType}
+          action={action}
           parentTitle={parentTitle}
           tags={selectedTags}
           onViewInAzure={handleViewInAzure}

@@ -7,6 +7,7 @@ type SubmitResult = CreateTaskResult | CreateUserStoryResult | CreateEpicResult 
 interface SuccessScreenProps {
   results: SubmitResult[];
   workItemType?: WorkItemType;
+  action?: 'create' | 'close';
   parentTitle: string;
   tags: string[];
   onViewInAzure: () => void;
@@ -45,12 +46,14 @@ const styles: Record<string, React.CSSProperties> = {
 export function SuccessScreen({
   results,
   workItemType = 'Task',
+  action = 'create',
   parentTitle,
   tags,
   onViewInAzure,
   onGoHome,
 }: SuccessScreenProps): React.ReactElement {
   const successCount = results.filter((r) => r.success).length;
+  const isClose = action === 'close';
 
   const getLabels = (): { singular: string; plural: string; parent: string } => {
     switch (workItemType) {
@@ -72,15 +75,15 @@ export function SuccessScreen({
     <div className="screen screen-center">
       <div style={styles.icon}>&#10003;</div>
       <h2 style={styles.heading}>
-        {successCount} {successCount === 1 ? singular : plural} created!
+        {successCount} {successCount === 1 ? singular : plural} {isClose ? 'closed' : 'created'}!
       </h2>
-      {parentTitle && (
+      {!isClose && parentTitle && (
         <p style={styles.detail}>
           {parent}: {parentTitle}
           {tags.length > 0 && ` | Tags: ${tags.join(', ')}`}
         </p>
       )}
-      {!parentTitle && tags.length > 0 && (
+      {!isClose && !parentTitle && tags.length > 0 && (
         <p style={styles.detail}>Tags: {tags.join(', ')}</p>
       )}
 

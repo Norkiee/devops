@@ -10,6 +10,7 @@ interface WorkItemToSubmit {
 interface SubmittingScreenProps {
   tasks: Array<{ taskId: string; title: string }> | WorkItemToSubmit[];
   workItemType?: WorkItemType;
+  action?: 'create' | 'close';
   completedTaskIds: Set<string>;
 }
 
@@ -29,6 +30,7 @@ const styles: Record<string, React.CSSProperties> = {
 export function SubmittingScreen({
   tasks,
   workItemType = 'Task',
+  action = 'create',
   completedTaskIds,
 }: SubmittingScreenProps): React.ReactElement {
   const getItemLabel = (): string => {
@@ -46,7 +48,7 @@ export function SubmittingScreen({
   return (
     <div className="screen screen-center">
       <LoadingSpinner
-        label={`Creating ${itemLabel}...`}
+        label={`${action === 'close' ? 'Closing' : 'Creating'} ${itemLabel}...`}
         sublabel="Pushing to Azure DevOps"
       />
       <div className="progress-list" style={{ marginTop: '16px' }}>
