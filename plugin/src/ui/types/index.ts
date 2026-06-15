@@ -59,6 +59,12 @@ export interface WorkItem {
   title: string;
   description?: string; // Optional - not used for User Stories
   selected: boolean;
+  // Plugin 1 (team) close flow: a task already created in Azure carries its
+  // Azure id and current closed state. `existing` distinguishes "create this"
+  // (new) from "close this" (existing open) in the Review screen.
+  existing?: boolean;
+  closed?: boolean;
+  azureId?: number;
 }
 
 // Alias for backwards compatibility

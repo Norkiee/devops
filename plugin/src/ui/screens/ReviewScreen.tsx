@@ -13,6 +13,7 @@ interface ReviewScreenProps {
   onWorkItemToggle: (frameId: string, workItemId: string) => void;
   onRemoveTag: (frameId: string, workItemId: string, tag: string) => void;
   onSubmit: () => void;
+  onClose?: () => void;
   onBack: () => void;
 }
 
@@ -85,6 +86,7 @@ export function ReviewScreen({
   onWorkItemToggle,
   onRemoveTag,
   onSubmit,
+  onClose,
   onBack,
 }: ReviewScreenProps): React.ReactElement {
   const [expandedFrames, setExpandedFrames] = useState<Set<string>>(
@@ -120,10 +122,10 @@ export function ReviewScreen({
   const { plural: itemLabel, singular: itemLabelSingular, parent: parentLabel } = getLabels();
 
   const totalItems = frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
-  const selectedCount = frameWorkItems.reduce(
-    (sum, fwi) => sum + fwi.workItems.filter((item) => item.selected).length,
-    0
-  );
+  const allItems = frameWorkItems.flatMap((fwi) => fwi.workItems);
+  // New tasks selected to create vs existing-open tasks selected to close.
+  const createCount = allItems.filter((i) => !i.existing && i.selected).length;
+  const closeCount = allItems.filter((i) => i.existing && !i.closed && i.selected).length;
 
   // Group frames by section
   const framesBySection: Record<string, FrameWorkItems[]> = {};
@@ -176,6 +178,8 @@ export function ReviewScreen({
                 description={item.description}
                 tags={selectedTags}
                 selected={item.selected}
+                existing={item.existing}
+                closed={item.closed}
                 onToggleSelect={() => onWorkItemToggle(fwi.frameId, item.id)}
                 onTitleChange={(title) =>
                   onWorkItemUpdate(fwi.frameId, item.id, { title })
@@ -228,11 +232,26 @@ export function ReviewScreen({
 
       <div className="sticky-footer">
         <div style={styles.footerStats}>
-          {selectedCount} of {totalItems} {selectedCount === 1 ? itemLabelSingular.toLowerCase() : itemLabel.toLowerCase()} selected
+          {createCount > 0 && `${createCount} to create`}
+          {createCount > 0 && closeCount > 0 && ' · '}
+          {closeCount > 0 && `${closeCount} to close`}
+          {createCount === 0 && closeCount === 0 && 'Nothing selected'}
         </div>
-        <Button onClick={onSubmit} fullWidth disabled={selectedCount === 0}>
-          Create {selectedCount} {selectedCount === 1 ? itemLabelSingular : itemLabel}
+        <Button onClick={onSubmit} fullWidth disabled={createCount === 0}>
+          Create {createCount} {createCount === 1 ? itemLabelSingular : itemLabel}
         </Button>
+        {onClose && (
+          <div style={{ marginTop: '8px' }}>
+            <Button
+              onClick={onClose}
+              fullWidth
+              variant="secondary"
+              disabled={closeCount === 0}
+            >
+              Close {closeCount} {closeCount === 1 ? itemLabelSingular : itemLabel}
+            </Button>
+          </div>
+        )}
         <div style={{ textAlign: 'center', marginTop: '8px' }}>
           <button className="link-button" onClick={onBack}>
             Back

@@ -245,20 +245,47 @@ export async function fetchWorkItemDetails(
   return data;
 }
 
-// Returns which of the given Azure work item ids still exist. Used at parse
-// time to forget dedup entries whose Task was deleted in Azure, so those lines
-// re-list as new.
-export async function checkWorkItemsExist(
+export interface ExistingWorkItem {
+  id: number;
+  state: string;
+  closed: boolean;
+}
+
+// Returns which of the given Azure work item ids still exist, each with its
+// current state and a closed flag. Used at parse time to forget deleted Tasks
+// (so they re-list as new) and to offer closing open ones.
+export async function fetchExistingWorkItems(
   accessToken: string,
   org: string,
+  projectId: string,
   ids: number[]
-): Promise<number[]> {
+): Promise<ExistingWorkItem[]> {
   if (ids.length === 0) return [];
-  const data = await request<{ existingIds: number[] }>(
-    `/api/azure/workitem?org=${encodeURIComponent(org)}&ids=${ids.join(',')}`,
+  const data = await request<{ existing: ExistingWorkItem[] }>(
+    `/api/azure/workitem?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}&ids=${ids.join(',')}`,
     { headers: authHeaders(accessToken) }
   );
-  return data.existingIds;
+  return data.existing;
+}
+
+// Closes (transitions to the process's completed state) the given Azure task
+// ids. Reuses the tasks endpoint with a closeIds body.
+export async function closeTasks(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  ids: number[]
+): Promise<CreateTaskResult[]> {
+  if (ids.length === 0) return [];
+  const data = await request<{ closeResults: CreateTaskResult[] }>(
+    `/api/azure/tasks?org=${encodeURIComponent(org)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ projectId, closeIds: ids }),
+    }
+  );
+  return data.closeResults;
 }
 
 export async function fetchTags(

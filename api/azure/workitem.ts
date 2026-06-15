@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getWorkItemDetails, getExistingWorkItemIds } from '../_lib/azure';
+import { getWorkItemDetails, getExistingWorkItems } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
 export default async function handler(
@@ -16,21 +16,28 @@ export default async function handler(
   const auth = requireAuth(req, res);
   if (!auth) return;
 
-  // Batch existence check: `?ids=1,2,3` returns which of those work items still
-  // exist. Folded into this endpoint (rather than a new function) to stay under
-  // the Hobby 12-function cap. Used by the plugin to forget deleted Tasks.
+  // Batch existence + state check: `?ids=1,2,3&projectId=...` returns which of
+  // those work items still exist, each with its state and a closed flag. Folded
+  // into this endpoint (rather than a new function) to stay under the Hobby
+  // 12-function cap. Used by the plugin to forget deleted Tasks and to offer
+  // closing open ones.
   const idsParam = req.query.ids;
   if (typeof idsParam === 'string' && idsParam.length > 0) {
+    const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
+    if (!projectId) {
+      res.status(400).json({ error: 'Missing projectId query parameter' });
+      return;
+    }
     const ids = idsParam
       .split(',')
       .map((s) => parseInt(s, 10))
       .filter((n) => !isNaN(n));
     try {
-      const existingIds = await getExistingWorkItemIds(
-        { org: auth.org, accessToken: auth.accessToken },
+      const existing = await getExistingWorkItems(
+        { org: auth.org, accessToken: auth.accessToken, projectId },
         ids
       );
-      res.status(200).json({ existingIds });
+      res.status(200).json({ existing });
     } catch (error) {
       console.error('Work item existence check error:', error);
       if (isAzureAuthError(error)) {

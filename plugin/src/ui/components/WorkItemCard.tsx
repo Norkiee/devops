@@ -12,6 +12,11 @@ interface WorkItemCardProps {
   onTitleChange: (title: string) => void;
   onDescriptionChange?: (description: string) => void;
   onRemoveTag: (tag: string) => void;
+  // Plugin 1 close flow: an item already in Azure renders read-only. `closed`
+  // ones show a done badge with no action; open `existing` ones offer a
+  // "close" checkbox instead of "create".
+  existing?: boolean;
+  closed?: boolean;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -90,6 +95,29 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#999999',
     fontStyle: 'italic',
   },
+  existingTitle: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#333333',
+    lineHeight: '1.4',
+  },
+  badgeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap' as const,
+  },
+  badge: {
+    fontSize: '11px',
+    fontWeight: 500,
+    padding: '1px 8px',
+    borderRadius: '10px',
+  },
+  willCloseText: {
+    fontSize: '11px',
+    color: '#b45309',
+    fontWeight: 500,
+  },
 };
 
 export function WorkItemCard({
@@ -102,7 +130,14 @@ export function WorkItemCard({
   onTitleChange,
   onDescriptionChange,
   onRemoveTag,
+  existing = false,
+  closed = false,
 }: WorkItemCardProps): React.ReactElement {
+  const mode: 'create' | 'close' | 'closed' = closed
+    ? 'closed'
+    : existing
+    ? 'close'
+    : 'create';
   const getLabels = (): { itemLabel: string; titlePlaceholder: string; hasDescription: boolean } => {
     switch (workItemType) {
       case 'Epic':
@@ -127,6 +162,48 @@ export function WorkItemCard({
       titleRef.current.style.height = `${titleRef.current.scrollHeight}px`;
     }
   }, [title]);
+
+  // Already in Azure and closed: read-only, done badge, no action.
+  if (mode === 'closed') {
+    return (
+      <div style={styles.cardDeselected}>
+        <div style={styles.content}>
+          <div style={styles.existingTitle}>{title}</div>
+          <div style={styles.badgeRow}>
+            <span style={{ ...styles.badge, background: '#dcfce7', color: '#166534' }}>
+              ✓ Closed
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Already in Azure and open: checkbox closes it (no editing).
+  if (mode === 'close') {
+    return (
+      <div style={selected ? styles.card : styles.cardDeselected}>
+        <div style={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            style={styles.checkbox}
+            aria-label={`Close ${itemLabel}: ${title}`}
+          />
+          <div style={styles.content}>
+            <div style={styles.existingTitle}>{title}</div>
+            <div style={styles.badgeRow}>
+              <span style={{ ...styles.badge, background: '#ede9fe', color: '#6b21a8' }}>
+                In Azure
+              </span>
+              {selected && <span style={styles.willCloseText}>· will be closed</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={selected ? styles.card : styles.cardDeselected}>

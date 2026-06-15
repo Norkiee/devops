@@ -21,7 +21,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { createTasks, createUserStories, createEpics, createFeatures, recordFeedback, checkWorkItemsExist, FeedbackItem } from './services/api';
+import { createTasks, createUserStories, createEpics, createFeatures, recordFeedback, fetchExistingWorkItems, closeTasks, FeedbackItem } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -143,31 +143,41 @@ export function App(): React.ReactElement {
   // item id encodes the dedup hash (`task-<hash>`) so submit can stamp it back
   // onto the frame. Lines already created on a prior run come in unselected.
   const handleParsed = useCallback(async (result: ParseResult) => {
-    let items = result.items;
+    // Per-line Azure status: existing (in Azure) and, if so, closed or open.
+    // Defaults to "new" until reconciled below.
+    const status = new Map<string, { existing: boolean; closed: boolean; azureId?: number }>();
+    for (const item of result.items) {
+      status.set(item.hash, { existing: false, closed: false });
+    }
 
-    // Reconcile the dedup ledger with Azure: a Task deleted in Azure should
-    // re-list as new. Verify the stored ids still exist; for any that don't,
-    // flip the line back to "new" and prune it from the frame's dedup map.
-    const createdWithId = items.filter(
+    // Reconcile the dedup ledger with Azure: fetch the stored ids' current
+    // state. Deleted ones re-list as new (and are pruned from the frame map);
+    // existing ones are tagged open/closed so Review can offer "Close".
+    const createdWithId = result.items.filter(
       (i) => i.alreadyCreated && typeof i.azureId === 'number'
     );
-    if (createdWithId.length > 0 && auth.accessToken && azureOrg) {
+    if (createdWithId.length > 0 && auth.accessToken && azureOrg && azureProjectId) {
       try {
-        const existing = new Set(
-          await checkWorkItemsExist(
-            auth.accessToken,
-            azureOrg,
-            createdWithId.map((i) => i.azureId as number)
-          )
+        const existing = await fetchExistingWorkItems(
+          auth.accessToken,
+          azureOrg,
+          azureProjectId,
+          createdWithId.map((i) => i.azureId as number)
         );
+        const byId = new Map(existing.map((e) => [e.id, e]));
         const staleHashes: string[] = [];
-        items = items.map((i) => {
-          if (i.alreadyCreated && typeof i.azureId === 'number' && !existing.has(i.azureId)) {
-            staleHashes.push(i.hash);
-            return { ...i, alreadyCreated: false };
+        for (const item of createdWithId) {
+          const found = byId.get(item.azureId as number);
+          if (!found) {
+            staleHashes.push(item.hash); // deleted in Azure → re-list as new
+          } else {
+            status.set(item.hash, {
+              existing: true,
+              closed: found.closed,
+              azureId: item.azureId,
+            });
           }
-          return i;
-        });
+        }
         if (staleHashes.length > 0) {
           parent.postMessage(
             { pluginMessage: { type: 'prune-dedup', data: staleHashes } },
@@ -175,24 +185,38 @@ export function App(): React.ReactElement {
           );
         }
       } catch {
-        // Best-effort: if the check fails, trust the local ledger as-is.
+        // Best-effort: if the check fails, fall back to the local ledger —
+        // treat already-created lines as existing+open (no state info).
+        for (const item of createdWithId) {
+          status.set(item.hash, { existing: true, closed: false, azureId: item.azureId });
+        }
       }
     }
 
-    // Surface new (not-yet-created) tasks at the top so they're easy to act on;
-    // already-created lines sink to the bottom. Stable sort keeps the original
-    // tasklist order within each group.
-    const ordered = [...items].sort(
-      (a, b) => Number(a.alreadyCreated) - Number(b.alreadyCreated)
-    );
+    // Order: new tasks first (actionable), then open existing (closeable),
+    // then closed (done). Stable sort preserves tasklist order within a group.
+    const rank = (h: string): number => {
+      const s = status.get(h)!;
+      return !s.existing ? 0 : s.closed ? 2 : 1;
+    };
+    const ordered = [...result.items].sort((a, b) => rank(a.hash) - rank(b.hash));
+
     const fwi: FrameWorkItems = {
       frameId: result.frameId,
       frameName: result.frameName,
-      workItems: ordered.map((item) => ({
-        id: `task-${item.hash}`,
-        title: item.title,
-        selected: !item.alreadyCreated,
-      })),
+      workItems: ordered.map((item) => {
+        const s = status.get(item.hash)!;
+        return {
+          id: `task-${item.hash}`,
+          title: item.title,
+          // New tasks are pre-selected to create; existing ones start
+          // unselected (the user opts in to close them).
+          selected: !s.existing,
+          existing: s.existing,
+          closed: s.closed,
+          azureId: s.azureId,
+        };
+      }),
     };
     setFrameWorkItems([fwi]);
     setCompletedFrameIds(new Set([result.frameId]));
@@ -204,7 +228,7 @@ export function App(): React.ReactElement {
     originalItemsRef.current = originals;
     setError(null);
     setScreen('review');
-  }, [auth.accessToken, azureOrg]);
+  }, [auth.accessToken, azureOrg, azureProjectId]);
 
   const getTotalWorkItemCount = useCallback(() => {
     return frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
@@ -318,7 +342,8 @@ export function App(): React.ReactElement {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    const selectedItems = getSelectedWorkItems();
+    // Only create NEW selected items — existing ones are handled by handleClose.
+    const selectedItems = getSelectedWorkItems().filter((i) => !i.existing);
     if (selectedItems.length === 0) return;
 
     setScreen('submitting');
@@ -435,6 +460,45 @@ export function App(): React.ReactElement {
     handleSessionExpired,
     sendFeedback,
     stampDedup,
+  ]);
+
+  // Close the selected existing-and-open tasks: transition them to the
+  // process's completed state in Azure. Results flow into the same
+  // success/partial screens as creation.
+  const handleClose = useCallback(async () => {
+    const closeable = getSelectedWorkItems().filter(
+      (i) => i.existing && !i.closed && typeof i.azureId === 'number'
+    );
+    if (closeable.length === 0) return;
+
+    setScreen('submitting');
+    setSubmittedIds(new Set());
+
+    try {
+      const closeResults = await closeTasks(
+        auth.accessToken!,
+        azureOrg,
+        azureProjectId,
+        closeable.map((i) => i.azureId as number)
+      );
+      setResults(closeResults);
+      setSubmittedIds(new Set(closeable.map((i) => i.id)));
+      const allSuccess = closeResults.every((r) => r.success);
+      setScreen(allSuccess ? 'success' : 'partial-failure');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AuthError') {
+        handleSessionExpired();
+      } else {
+        setError(err instanceof Error ? err.message : 'Close failed');
+        setScreen('review');
+      }
+    }
+  }, [
+    getSelectedWorkItems,
+    auth.accessToken,
+    azureOrg,
+    azureProjectId,
+    handleSessionExpired,
   ]);
 
   const handleRetry = useCallback(async () => {
@@ -657,6 +721,7 @@ export function App(): React.ReactElement {
           onWorkItemToggle={handleWorkItemToggle}
           onRemoveTag={handleRemoveTag}
           onSubmit={handleSubmit}
+          onClose={handleClose}
           onBack={() => setScreen('context')}
         />
       )}

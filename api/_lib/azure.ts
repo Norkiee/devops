@@ -289,14 +289,20 @@ export async function getTags(
   return data.value.map((t) => t.name);
 }
 
-// Resolve the "in-progress" state name for the Task type in this project. The
-// name varies by process template (Agile→Active, Basic→Doing, Scrum→In
-// Progress), so we read the type's states and pick the one in the InProgress
-// category rather than hardcoding a value that breaks on non-Agile projects.
-// Falls back to 'Active' if the states API is unavailable.
-export async function getTaskInProgressState(
+// A Task state name paired with its metastate category (Proposed, InProgress,
+// Resolved, Completed, Removed). The category is the process-independent way to
+// find "in progress" or "done" regardless of the state's display name.
+export interface TaskStateInfo {
+  name: string;
+  category: string;
+}
+
+// Read the valid states for the Task type in this project. The API returns the
+// category under `category` (older) or `stateCategory` (newer), so we normalize.
+// Returns [] if the states API is unavailable.
+export async function getTaskStates(
   opts: AzureApiOptions & { projectId: string }
-): Promise<string> {
+): Promise<TaskStateInfo[]> {
   try {
     const response = await azureFetch(
       `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitemtypes/Task/states?api-version=${AZURE_API_VERSION}`,
@@ -305,13 +311,58 @@ export async function getTaskInProgressState(
     const data = (await response.json()) as {
       value: Array<{ name: string; category?: string; stateCategory?: string }>;
     };
-    const inProgress = data.value.find(
-      (s) => (s.stateCategory || s.category) === 'InProgress'
-    );
-    return inProgress?.name || 'Active';
+    return data.value.map((s) => ({
+      name: s.name,
+      category: s.stateCategory || s.category || '',
+    }));
   } catch {
-    return 'Active';
+    return [];
   }
+}
+
+// Resolve the "in-progress" state name (Agile→Active, Basic→Doing, Scrum→In
+// Progress) by metastate category. Falls back to 'Active'.
+export async function getTaskInProgressState(
+  opts: AzureApiOptions & { projectId: string }
+): Promise<string> {
+  const states = await getTaskStates(opts);
+  return states.find((s) => s.category === 'InProgress')?.name || 'Active';
+}
+
+// Resolve the "completed" state name (Agile→Closed, Basic/Scrum→Done) by
+// metastate category. Falls back to 'Closed'.
+export async function getTaskClosedState(
+  opts: AzureApiOptions & { projectId: string }
+): Promise<string> {
+  const states = await getTaskStates(opts);
+  return states.find((s) => s.category === 'Completed')?.name || 'Closed';
+}
+
+// Transition an existing work item to the given state via a state-only PATCH.
+export async function setTaskState(
+  opts: AzureApiOptions & { projectId: string },
+  id: number,
+  state: string
+): Promise<{ id: number; url: string }> {
+  const response = await azureFetch(
+    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/${id}?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json-patch+json' },
+      body: JSON.stringify([
+        { op: 'add', path: '/fields/System.State', value: state },
+      ]),
+    }
+  );
+  const data = (await response.json()) as {
+    id: number;
+    _links?: { html?: { href?: string } };
+  };
+  return {
+    id: data.id,
+    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+  };
 }
 
 export async function createTask(
@@ -495,23 +546,41 @@ export async function queryStoriesByEpic(
   }));
 }
 
-// Returns the subset of the given work item ids that still exist in Azure.
-// `errorPolicy=omit` makes the batch endpoint drop missing/deleted ids instead
-// of failing the whole request, so deleted Tasks simply don't come back — which
-// is how the plugin detects that a previously-created Task was removed.
-export async function getExistingWorkItemIds(
-  opts: AzureApiOptions,
+export interface ExistingWorkItem {
+  id: number;
+  state: string;
+  closed: boolean; // state is in the Completed or Removed metastate category
+}
+
+// Returns which of the given ids still exist in Azure, each with its current
+// state and whether that state is "closed" (done/removed). `errorPolicy=omit`
+// drops missing/deleted ids instead of failing the request — that's how the
+// plugin detects a previously-created Task was deleted. Task states are read
+// once to classify each item's state by metastate category.
+export async function getExistingWorkItems(
+  opts: AzureApiOptions & { projectId: string },
   ids: number[]
-): Promise<number[]> {
+): Promise<ExistingWorkItem[]> {
   if (ids.length === 0) return [];
+  const states = await getTaskStates(opts);
+  const closedNames = new Set(
+    states
+      .filter((s) => s.category === 'Completed' || s.category === 'Removed')
+      .map((s) => s.name)
+  );
   // The batch endpoint accepts up to 200 ids per call.
   const idsParam = ids.slice(0, 200).join(',');
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${opts.org}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.State&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
-  const data = (await response.json()) as { value?: Array<{ id: number }> };
-  return (data.value || []).map((wi) => wi.id);
+  const data = (await response.json()) as {
+    value?: Array<{ id: number; fields: Record<string, string> }>;
+  };
+  return (data.value || []).map((wi) => {
+    const state = wi.fields['System.State'];
+    return { id: wi.id, state, closed: closedNames.has(state) };
+  });
 }
 
 export async function getWorkItemDetails(
