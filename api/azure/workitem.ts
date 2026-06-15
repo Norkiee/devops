@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getWorkItemDetails } from '../_lib/azure';
+import { getWorkItemDetails, getExistingWorkItemIds } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
 export default async function handler(
@@ -15,6 +15,32 @@ export default async function handler(
 
   const auth = requireAuth(req, res);
   if (!auth) return;
+
+  // Batch existence check: `?ids=1,2,3` returns which of those work items still
+  // exist. Folded into this endpoint (rather than a new function) to stay under
+  // the Hobby 12-function cap. Used by the plugin to forget deleted Tasks.
+  const idsParam = req.query.ids;
+  if (typeof idsParam === 'string' && idsParam.length > 0) {
+    const ids = idsParam
+      .split(',')
+      .map((s) => parseInt(s, 10))
+      .filter((n) => !isNaN(n));
+    try {
+      const existingIds = await getExistingWorkItemIds(
+        { org: auth.org, accessToken: auth.accessToken },
+        ids
+      );
+      res.status(200).json({ existingIds });
+    } catch (error) {
+      console.error('Work item existence check error:', error);
+      if (isAzureAuthError(error)) {
+        res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to check work items' });
+    }
+    return;
+  }
 
   const id = req.query.id;
   if (!id || typeof id !== 'string') {

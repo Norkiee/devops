@@ -175,11 +175,16 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
     dedupNodeId = dedupNode.id;
     const dedupMap = readDedupMap(dedupNode);
     const parsed = parseTasklist(figma.currentPage.selection);
-    const items = parsed.map((t) => ({
-      title: t.title,
-      hash: t.hash,
-      alreadyCreated: Object.prototype.hasOwnProperty.call(dedupMap, t.hash),
-    }));
+    const items = parsed.map((t) => {
+      const known = Object.prototype.hasOwnProperty.call(dedupMap, t.hash);
+      // Carry the stored Azure id so the UI can verify the Task still exists.
+      return {
+        title: t.title,
+        hash: t.hash,
+        alreadyCreated: known,
+        azureId: known ? dedupMap[t.hash] : undefined,
+      };
+    });
     figma.ui.postMessage({
       type: 'parse-result',
       frameId: dedupNode.id,
@@ -200,6 +205,20 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
       for (const { hash, azureId } of pairs) {
         if (hash && typeof azureId === 'number') map[hash] = azureId;
       }
+      node.setPluginData(DEDUP_KEY, JSON.stringify(map));
+    }
+  }
+
+  if (msg.type === 'prune-dedup') {
+    // Remove dedup entries whose Azure Task was deleted, so those lines re-list
+    // as new on this and future runs.
+    const hashes = (msg.data as string[]) || [];
+    const node = dedupNodeId
+      ? (figma.getNodeById(dedupNodeId) as SceneNode | null)
+      : null;
+    if (node && 'getPluginData' in node && hashes.length > 0) {
+      const map = readDedupMap(node);
+      for (const h of hashes) delete map[h];
       node.setPluginData(DEDUP_KEY, JSON.stringify(map));
     }
   }

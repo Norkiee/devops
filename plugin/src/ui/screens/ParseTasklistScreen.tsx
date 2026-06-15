@@ -7,6 +7,7 @@ export interface ParsedItem {
   title: string;
   hash: string;
   alreadyCreated: boolean;
+  azureId?: number; // present when alreadyCreated — used to verify it still exists
 }
 
 export interface ParseResult {

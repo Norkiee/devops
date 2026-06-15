@@ -21,7 +21,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { createTasks, createUserStories, createEpics, createFeatures, recordFeedback, FeedbackItem } from './services/api';
+import { createTasks, createUserStories, createEpics, createFeatures, recordFeedback, checkWorkItemsExist, FeedbackItem } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -142,11 +142,47 @@ export function App(): React.ReactElement {
   // consumes directly from the parsed tasklist lines — no Claude call. The work
   // item id encodes the dedup hash (`task-<hash>`) so submit can stamp it back
   // onto the frame. Lines already created on a prior run come in unselected.
-  const handleParsed = useCallback((result: ParseResult) => {
+  const handleParsed = useCallback(async (result: ParseResult) => {
+    let items = result.items;
+
+    // Reconcile the dedup ledger with Azure: a Task deleted in Azure should
+    // re-list as new. Verify the stored ids still exist; for any that don't,
+    // flip the line back to "new" and prune it from the frame's dedup map.
+    const createdWithId = items.filter(
+      (i) => i.alreadyCreated && typeof i.azureId === 'number'
+    );
+    if (createdWithId.length > 0 && auth.accessToken && azureOrg) {
+      try {
+        const existing = new Set(
+          await checkWorkItemsExist(
+            auth.accessToken,
+            azureOrg,
+            createdWithId.map((i) => i.azureId as number)
+          )
+        );
+        const staleHashes: string[] = [];
+        items = items.map((i) => {
+          if (i.alreadyCreated && typeof i.azureId === 'number' && !existing.has(i.azureId)) {
+            staleHashes.push(i.hash);
+            return { ...i, alreadyCreated: false };
+          }
+          return i;
+        });
+        if (staleHashes.length > 0) {
+          parent.postMessage(
+            { pluginMessage: { type: 'prune-dedup', data: staleHashes } },
+            '*'
+          );
+        }
+      } catch {
+        // Best-effort: if the check fails, trust the local ledger as-is.
+      }
+    }
+
     // Surface new (not-yet-created) tasks at the top so they're easy to act on;
     // already-created lines sink to the bottom. Stable sort keeps the original
     // tasklist order within each group.
-    const ordered = [...result.items].sort(
+    const ordered = [...items].sort(
       (a, b) => Number(a.alreadyCreated) - Number(b.alreadyCreated)
     );
     const fwi: FrameWorkItems = {
@@ -168,7 +204,7 @@ export function App(): React.ReactElement {
     originalItemsRef.current = originals;
     setError(null);
     setScreen('review');
-  }, []);
+  }, [auth.accessToken, azureOrg]);
 
   const getTotalWorkItemCount = useCallback(() => {
     return frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);

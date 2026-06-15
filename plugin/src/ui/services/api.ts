@@ -245,6 +245,22 @@ export async function fetchWorkItemDetails(
   return data;
 }
 
+// Returns which of the given Azure work item ids still exist. Used at parse
+// time to forget dedup entries whose Task was deleted in Azure, so those lines
+// re-list as new.
+export async function checkWorkItemsExist(
+  accessToken: string,
+  org: string,
+  ids: number[]
+): Promise<number[]> {
+  if (ids.length === 0) return [];
+  const data = await request<{ existingIds: number[] }>(
+    `/api/azure/workitem?org=${encodeURIComponent(org)}&ids=${ids.join(',')}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.existingIds;
+}
+
 export async function fetchTags(
   accessToken: string,
   org: string,

@@ -495,6 +495,25 @@ export async function queryStoriesByEpic(
   }));
 }
 
+// Returns the subset of the given work item ids that still exist in Azure.
+// `errorPolicy=omit` makes the batch endpoint drop missing/deleted ids instead
+// of failing the whole request, so deleted Tasks simply don't come back — which
+// is how the plugin detects that a previously-created Task was removed.
+export async function getExistingWorkItemIds(
+  opts: AzureApiOptions,
+  ids: number[]
+): Promise<number[]> {
+  if (ids.length === 0) return [];
+  // The batch endpoint accepts up to 200 ids per call.
+  const idsParam = ids.slice(0, 200).join(',');
+  const response = await azureFetch(
+    `https://dev.azure.com/${opts.org}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
+    opts.accessToken
+  );
+  const data = (await response.json()) as { value?: Array<{ id: number }> };
+  return (data.value || []).map((wi) => wi.id);
+}
+
 export async function getWorkItemDetails(
   opts: AzureApiOptions & { workItemId: number }
 ): Promise<AzureWorkItemDetails> {
