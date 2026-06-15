@@ -28,8 +28,8 @@ const styles: Record<string, React.CSSProperties> = {
   badge: {
     display: 'inline-block',
     padding: '4px 12px',
-    backgroundColor: '#f3e8ff',
-    color: '#7c3aed',
+    backgroundColor: '#E6FAF7',
+    color: '#01C7B1',
     borderRadius: '12px',
     fontSize: '12px',
     fontWeight: 500,

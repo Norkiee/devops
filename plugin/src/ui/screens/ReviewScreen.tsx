@@ -19,12 +19,12 @@ interface ReviewScreenProps {
 
 const styles: Record<string, React.CSSProperties> = {
   parentInfo: {
-    background: '#f3e8ff',
-    border: '1px solid #d8b4fe',
+    background: '#E6FAF7',
+    border: '1px solid #7FE0D6',
     borderRadius: '8px',
     padding: '10px 12px',
     fontSize: '12px',
-    color: '#6b21a8',
+    color: '#0A6B60',
     marginBottom: '12px',
   },
   frameGroup: {

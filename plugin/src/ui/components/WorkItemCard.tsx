@@ -49,7 +49,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '16px',
     marginTop: '2px',
     cursor: 'pointer',
-    accentColor: '#7c3aed',
+    accentColor: '#01C7B1',
   },
   content: {
     flex: 1,
@@ -194,7 +194,7 @@ export function WorkItemCard({
           <div style={styles.content}>
             <div style={styles.existingTitle}>{title}</div>
             <div style={styles.badgeRow}>
-              <span style={{ ...styles.badge, background: '#ede9fe', color: '#6b21a8' }}>
+              <span style={{ ...styles.badge, background: '#D9F7F3', color: '#0A6B60' }}>
                 In Azure
               </span>
               {selected && <span style={styles.willCloseText}>· will be closed</span>}

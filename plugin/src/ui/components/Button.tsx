@@ -14,18 +14,18 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '9999px',
     fontSize: '14px',
     fontWeight: 500,
-    fontFamily: "'General Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+    fontFamily: "'Sora', -apple-system, BlinkMacSystemFont, sans-serif",
     cursor: 'pointer',
     border: 'none',
     transition: 'background 0.15s',
     lineHeight: '1.4',
   },
   primary: {
-    background: '#7c3aed',
+    background: '#01C7B1',
     color: '#ffffff',
   },
   primaryDisabled: {
-    background: '#c4b5fd',
+    background: '#99E2DA',
     color: '#ffffff',
     cursor: 'not-allowed',
   },
@@ -41,7 +41,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   text: {
     background: 'transparent',
-    color: '#7c3aed',
+    color: '#01C7B1',
     padding: '8px 16px',
   },
   textDisabled: {

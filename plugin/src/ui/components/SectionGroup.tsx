@@ -27,21 +27,21 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
   },
   folderIcon: {
-    color: '#7c3aed',
+    color: '#01C7B1',
   },
   chevron: {
     fontSize: '12px',
-    color: '#7c3aed',
+    color: '#01C7B1',
     transition: 'transform 0.2s',
   },
   sectionName: {
     fontSize: '13px',
     fontWeight: 600,
-    color: '#6b21a8',
+    color: '#0A6B60',
   },
   count: {
     fontSize: '11px',
-    color: '#7c3aed',
+    color: '#01C7B1',
     backgroundColor: '#e9d5ff',
     padding: '2px 8px',
     borderRadius: '10px',

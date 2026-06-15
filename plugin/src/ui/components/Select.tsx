@@ -39,7 +39,7 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'border-color 0.15s, box-shadow 0.15s',
   },
   triggerFocused: {
-    borderColor: '#7c3aed',
+    borderColor: '#01C7B1',
     boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.1)',
   },
   triggerText: {
@@ -84,14 +84,14 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.1s',
   },
   optionHovered: {
-    background: '#f3e8ff',
+    background: '#E6FAF7',
   },
   optionSelected: {
     background: 'transparent',
   },
   checkmark: {
     marginLeft: 'auto',
-    color: '#7c3aed',
+    color: '#01C7B1',
   },
 };
 
@@ -194,7 +194,7 @@ export function Select({
                   >
                     <path
                       d="M2.5 7L5.5 10L11.5 4"
-                      stroke="#7c3aed"
+                      stroke="#01C7B1"
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"

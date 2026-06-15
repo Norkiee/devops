@@ -33,12 +33,12 @@ interface SelectParentScreenProps {
 
 const styles: Record<string, React.CSSProperties> = {
   infoBox: {
-    background: '#f3e8ff',
-    border: '1px solid #d8b4fe',
+    background: '#E6FAF7',
+    border: '1px solid #7FE0D6',
     borderRadius: '8px',
     padding: '12px',
     fontSize: '12px',
-    color: '#6b21a8',
+    color: '#0A6B60',
     marginBottom: '16px',
     display: 'flex',
     alignItems: 'flex-start',
@@ -449,8 +449,8 @@ export function SelectParentScreen({
 
         <div style={styles.infoBox}>
           <svg style={styles.infoIcon} width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6.5" stroke="#7c3aed" strokeWidth="1.5"/>
-            <path d="M8 7v4M8 5v.5" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round"/>
+            <circle cx="8" cy="8" r="6.5" stroke="#01C7B1" strokeWidth="1.5"/>
+            <path d="M8 7v4M8 5v.5" stroke="#01C7B1" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <span>{getInfoText()}</span>
         </div>
