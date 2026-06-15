@@ -1,5 +1,5 @@
 {
-  "name": "taskscribe-plugin",
+  "name": "tasklist-plugin",
   "version": "1.0.0",
   "private": true,
   "scripts": {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Screen,
   FrameData,
@@ -21,7 +21,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { createTasks, createUserStories, createEpics, createFeatures, recordFeedback, fetchExistingWorkItems, closeTasks, FeedbackItem } from './services/api';
+import { createTasks, createUserStories, createEpics, createFeatures, fetchExistingWorkItems, closeTasks } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -52,9 +52,6 @@ export function App(): React.ReactElement {
   // Generated work items
   const [frameWorkItems, setFrameWorkItems] = useState<FrameWorkItems[]>([]);
   const [completedFrameIds, setCompletedFrameIds] = useState<Set<string>>(new Set());
-  // Snapshot of items as first generated (id → title/description), so submit can
-  // detect which ones the user edited before pushing.
-  const originalItemsRef = useRef<Map<string, { title: string; description?: string }>>(new Map());
 
   // Azure connection state
   const [parentTitle, setParentTitle] = useState('');
@@ -220,12 +217,6 @@ export function App(): React.ReactElement {
     };
     setFrameWorkItems([fwi]);
     setCompletedFrameIds(new Set([result.frameId]));
-
-    const originals = new Map<string, { title: string; description?: string }>();
-    for (const item of fwi.workItems) {
-      originals.set(item.id, { title: item.title, description: item.description });
-    }
-    originalItemsRef.current = originals;
     setError(null);
     setScreen('review');
   }, [auth.accessToken, azureOrg, azureProjectId]);
@@ -285,40 +276,6 @@ export function App(): React.ReactElement {
     }
     return items;
   }, [frameWorkItems]);
-
-  // Reports the outcome of a submit pass to the memory layer (best-effort).
-  // pushed = landed in Azure, rejected = deselected, edited = changed pre-submit,
-  // approved = selected but not successfully pushed.
-  const sendFeedback = useCallback(
-    (submitResults: SubmitResult[]) => {
-      const selectedIds = new Set(getSelectedWorkItems().map((i) => i.id));
-      const resultById = new Map<string, { success: boolean; azureId?: number }>();
-      for (const r of submitResults) {
-        const id = 'workItemId' in r ? r.workItemId : 'taskId' in r ? r.taskId : '';
-        const azureId =
-          'azureTaskId' in r ? r.azureTaskId : 'azureId' in r ? r.azureId : undefined;
-        if (id) resultById.set(id, { success: r.success, azureId });
-      }
-
-      const allItems = frameWorkItems.flatMap((fwi) => fwi.workItems);
-      const feedback: FeedbackItem[] = allItems.map((item) => {
-        if (!selectedIds.has(item.id)) {
-          return { workItemId: item.id, status: 'rejected' };
-        }
-        const res = resultById.get(item.id);
-        if (res?.success) {
-          return { workItemId: item.id, status: 'pushed', azureId: res.azureId };
-        }
-        const orig = originalItemsRef.current.get(item.id);
-        const edited =
-          !!orig && (orig.title !== item.title || orig.description !== item.description);
-        return { workItemId: item.id, status: edited ? 'edited' : 'approved' };
-      });
-
-      void recordFeedback(feedback);
-    },
-    [getSelectedWorkItems, frameWorkItems]
-  );
 
   // Plugin 1 (team): stamp the dedup hash → Azure id for each successfully
   // created task onto the tasklist frame (via main.ts), so a re-run skips them.
@@ -434,7 +391,6 @@ export function App(): React.ReactElement {
       }
 
       setResults(submitResults);
-      sendFeedback(submitResults);
       stampDedup(submitResults);
       const allIds = new Set(selectedItems.map((item) => item.id));
       setSubmittedIds(allIds);
@@ -458,7 +414,6 @@ export function App(): React.ReactElement {
     azureOrg,
     azureProjectId,
     handleSessionExpired,
-    sendFeedback,
     stampDedup,
   ]);
 
@@ -596,7 +551,6 @@ export function App(): React.ReactElement {
         return retryResult || r;
       });
       setResults(updatedResults);
-      sendFeedback(updatedResults);
       stampDedup(retryResults);
 
       const allIds = new Set(selectedItems.map((item) => item.id));
@@ -622,7 +576,6 @@ export function App(): React.ReactElement {
     azureOrg,
     azureProjectId,
     handleSessionExpired,
-    sendFeedback,
     stampDedup,
   ]);
 

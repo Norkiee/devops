@@ -1,5 +1,5 @@
 {
-  "name": "taskscribe",
+  "name": "tasklist",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -8,7 +8,6 @@
     "migrate": "node scripts/migrate.mjs migrations/001_init.sql"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "@neondatabase/serverless": "^0.10.4"
   },
   "devDependencies": {

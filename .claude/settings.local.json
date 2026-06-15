@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial implementation of DevOps Sync Figma plugin\n\nComplete project scaffolding with Vercel serverless backend \\(Claude AI\ntask generation, Azure DevOps OAuth + CRUD endpoints\\) and Figma plugin\nUI \\(React, 9-screen flow, reusable components, hooks, and state machine\\).\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run *)"
+    ]
+  }
+}

@@ -1,7 +1,4 @@
 import {
-  FrameData,
-  FrameTasks,
-  FrameWorkItems,
   AzureProject,
   AzureStory,
   AzureWorkItemDetails,
@@ -13,9 +10,7 @@ import {
   UserStoryToSubmit,
   EpicToSubmit,
   FeatureToSubmit,
-  WorkItemType,
   WorkItemTypeInfo,
-  HierarchyContext,
 } from '../types';
 
 // Injected at build time by webpack's DefinePlugin (see webpack.config.js).
@@ -71,63 +66,6 @@ async function request<T>(
 
 function authHeaders(accessToken: string): Record<string, string> {
   return { Authorization: `Bearer ${accessToken}` };
-}
-
-export async function generateWorkItems(
-  frames: FrameData[],
-  workItemType: WorkItemType = 'Task',
-  context?: string,
-  hierarchyContext?: HierarchyContext,
-  fileKey?: string
-): Promise<{ workItemType: WorkItemType; frameWorkItems: FrameWorkItems[] }> {
-  const data = await request<{
-    workItemType: WorkItemType;
-    frameWorkItems: FrameWorkItems[];
-    frameTasks?: FrameTasks[];
-  }>('/api/generate', {
-    method: 'POST',
-    body: JSON.stringify({ frames, context, workItemType, hierarchyContext, fileKey }),
-  });
-  return {
-    workItemType: data.workItemType,
-    frameWorkItems: data.frameWorkItems,
-  };
-}
-
-// Feedback status reported back to the memory layer after a submit pass.
-export type FeedbackStatus = 'approved' | 'edited' | 'rejected' | 'pushed';
-
-export interface FeedbackItem {
-  workItemId: string;
-  status: FeedbackStatus;
-  azureId?: number;
-  feedback?: string;
-}
-
-// Records what happened to generated items after submit. Best-effort: never
-// throws, so a memory hiccup can't interrupt the plugin flow.
-export async function recordFeedback(items: FeedbackItem[]): Promise<void> {
-  if (items.length === 0) return;
-  try {
-    await request('/api/feedback', {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    });
-  } catch {
-    // Intentionally swallowed — feedback is non-critical.
-  }
-}
-
-// Backwards compatibility
-export async function generateTasks(
-  frames: FrameData[],
-  context?: string
-): Promise<FrameTasks[]> {
-  const data = await request<{ frameTasks: FrameTasks[] }>('/api/generate', {
-    method: 'POST',
-    body: JSON.stringify({ frames, context, workItemType: 'Task' }),
-  });
-  return data.frameTasks;
 }
 
 export function getAuthUrl(state: string): string {
