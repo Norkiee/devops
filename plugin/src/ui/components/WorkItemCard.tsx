@@ -58,7 +58,8 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
     border: '1px solid #E6ECF0',
     fontSize: '13px',
-    fontWeight: 600,
+    fontWeight: 400,
+    color: '#3D5263',
     fontFamily: 'inherit',
     outline: 'none',
     width: '100%',
@@ -93,8 +94,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   existingTitle: {
     fontSize: '13px',
-    fontWeight: 600,
-    color: '#333333',
+    fontWeight: 400,
+    color: '#3D5263',
     lineHeight: '1.4',
   },
   badgeRow: {
