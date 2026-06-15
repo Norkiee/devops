@@ -3,6 +3,33 @@ import { createTask, getCurrentUser, getTaskInProgressState, getTaskClosedState,
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
+// Maps a settled per-item batch (create or close) to the API result shape,
+// flagging auth errors via the callback. `idAt` supplies the taskId for the
+// rejected case, where the worker's value isn't available.
+function toResults(
+  settled: PromiseSettledResult<{ taskId: string; azureTaskId: number; taskUrl: string }>[],
+  idAt: (index: number) => string,
+  action: 'creating' | 'closing',
+  onAuthError: () => void
+): CreateTaskResult[] {
+  return settled.map((s, index) => {
+    if (s.status === 'fulfilled') {
+      return {
+        taskId: s.value.taskId,
+        success: true,
+        azureTaskId: s.value.azureTaskId,
+        taskUrl: s.value.taskUrl,
+      };
+    }
+    if (isAzureAuthError(s.reason)) onAuthError();
+    return {
+      taskId: idAt(index),
+      success: false,
+      error: s.reason instanceof Error ? s.reason.message : `Unknown error ${action} task`,
+    };
+  });
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -64,23 +91,12 @@ export default async function handler(
         }
       );
 
-      results = settledResults.map((settled, index) => {
-        if (settled.status === 'fulfilled') {
-          return {
-            taskId: settled.value.taskId,
-            success: true,
-            azureTaskId: settled.value.azureTaskId,
-            taskUrl: settled.value.taskUrl,
-          };
-        }
-        const error = settled.reason;
-        if (isAzureAuthError(error)) hasAuthError = true;
-        return {
-          taskId: tasks![index].taskId,
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error creating task',
-        };
-      });
+      results = toResults(
+        settledResults,
+        (i) => tasks![i].taskId,
+        'creating',
+        () => { hasAuthError = true; }
+      );
     }
 
     // ── Close existing tasks (transition to the completed state) ─────
@@ -100,26 +116,15 @@ export default async function handler(
             id,
             closedState
           );
-          return { id, url: result.url };
+          return { taskId: String(id), azureTaskId: result.id, taskUrl: result.url };
         }
       );
-      closeResults = settled.map((s, index) => {
-        if (s.status === 'fulfilled') {
-          return {
-            taskId: String(closeIds![index]),
-            success: true,
-            azureTaskId: s.value.id,
-            taskUrl: s.value.url,
-          };
-        }
-        const error = s.reason;
-        if (isAzureAuthError(error)) hasAuthError = true;
-        return {
-          taskId: String(closeIds![index]),
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error closing task',
-        };
-      });
+      closeResults = toResults(
+        settled,
+        (i) => String(closeIds![i]),
+        'closing',
+        () => { hasAuthError = true; }
+      );
     }
 
     if (hasAuthError) {

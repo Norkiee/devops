@@ -38,7 +38,7 @@ export function App(): React.ReactElement {
   const [screen, setScreen] = useState<Screen>('home');
   const [error, setError] = useState<string | null>(null);
 
-  const { frames, sections, frameCount, sectionCount, fileKey, requestFrames } = useFrameSelection();
+  const { frameCount, sectionCount, requestFrames } = useFrameSelection();
   const auth = useAzureAuth();
   const { storage, updateStorage } = usePluginStorage();
   const containerRef = useAutoResize();
@@ -220,10 +220,6 @@ export function App(): React.ReactElement {
     setError(null);
     setScreen('review');
   }, [auth.accessToken, azureOrg, azureProjectId]);
-
-  const getTotalWorkItemCount = useCallback(() => {
-    return frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
-  }, [frameWorkItems]);
 
   const handleWorkItemUpdate = useCallback(
     (frameId: string, workItemId: string, updates: Partial<WorkItem>) => {

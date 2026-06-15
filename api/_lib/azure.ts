@@ -432,17 +432,7 @@ export async function createTask(
   // transition is logged rather than failing the whole create.
   if (task.state) {
     try {
-      await azureFetch(
-        `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/${data.id}?api-version=${AZURE_API_VERSION}`,
-        opts.accessToken,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json-patch+json' },
-          body: JSON.stringify([
-            { op: 'add', path: '/fields/System.State', value: task.state },
-          ]),
-        }
-      );
+      await setTaskState(opts, data.id, task.state);
     } catch (err) {
       console.error(
         `Task ${data.id} created but transition to state '${task.state}' failed:`,
