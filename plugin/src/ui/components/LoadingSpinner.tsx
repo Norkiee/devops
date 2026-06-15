@@ -15,7 +15,7 @@ const styles: Record<string, React.CSSProperties> = {
   spinner: {
     width: '32px',
     height: '32px',
-    border: '3px solid #e0e0e0',
+    border: '3px solid #E6ECF0',
     borderTopColor: '#01C7B1',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',

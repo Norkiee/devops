@@ -21,7 +21,7 @@ interface WorkItemCardProps {
 
 const styles: Record<string, React.CSSProperties> = {
   card: {
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E6ECF0',
     borderRadius: '8px',
     padding: '12px',
     display: 'flex',
@@ -30,7 +30,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#ffffff',
   },
   cardDeselected: {
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E6ECF0',
     borderRadius: '8px',
     padding: '12px',
     display: 'flex',
@@ -60,7 +60,7 @@ const styles: Record<string, React.CSSProperties> = {
   titleTextarea: {
     padding: '6px 8px',
     borderRadius: '4px',
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E6ECF0',
     fontSize: '13px',
     fontWeight: 600,
     fontFamily: 'inherit',
@@ -75,7 +75,7 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: {
     padding: '6px 8px',
     borderRadius: '4px',
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E6ECF0',
     fontSize: '12px',
     fontFamily: 'inherit',
     resize: 'vertical' as const,

@@ -32,7 +32,7 @@ const styles: Record<string, React.CSSProperties> = {
   secondary: {
     background: '#f5f5f5',
     color: '#333333',
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E6ECF0',
   },
   secondaryDisabled: {
     background: '#f5f5f5',

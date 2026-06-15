@@ -24,7 +24,7 @@ const styles: Record<string, React.CSSProperties> = {
   input: {
     padding: '10px 12px',
     borderRadius: '10px',
-    border: '1px solid #e0e0e0',
+    border: '1px solid #E6ECF0',
     fontSize: '13px',
     fontFamily: 'inherit',
     resize: 'vertical' as const,

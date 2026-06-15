@@ -58,7 +58,7 @@ const styles: Record<string, React.CSSProperties> = {
   itemCount: {
     fontSize: '11px',
     color: '#666666',
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#E6ECF0',
     padding: '2px 8px',
     borderRadius: '10px',
   },
