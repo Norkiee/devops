@@ -45,11 +45,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
   },
   checkbox: {
-    width: '16px',
-    height: '16px',
     marginTop: '2px',
-    cursor: 'pointer',
-    accentColor: '#01C7B1',
   },
   content: {
     flex: 1,
@@ -112,11 +108,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     padding: '1px 8px',
     borderRadius: '10px',
-  },
-  willCloseText: {
-    fontSize: '11px',
-    color: '#b45309',
-    fontWeight: 500,
   },
 };
 
@@ -186,6 +177,7 @@ export function WorkItemCard({
         <div style={styles.checkboxRow}>
           <input
             type="checkbox"
+            className="tasklist-checkbox"
             checked={selected}
             onChange={onToggleSelect}
             style={styles.checkbox}
@@ -197,7 +189,6 @@ export function WorkItemCard({
               <span style={{ ...styles.badge, background: '#D9F7F3', color: '#0A6B60' }}>
                 In Azure
               </span>
-              {selected && <span style={styles.willCloseText}>· will be closed</span>}
             </div>
           </div>
         </div>
@@ -210,6 +201,7 @@ export function WorkItemCard({
       <div style={styles.checkboxRow}>
         <input
           type="checkbox"
+          className="tasklist-checkbox"
           checked={selected}
           onChange={onToggleSelect}
           style={styles.checkbox}

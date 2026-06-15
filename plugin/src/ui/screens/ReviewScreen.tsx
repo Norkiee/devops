@@ -51,12 +51,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#333333',
   },
-  selectAll: {
-    width: '16px',
-    height: '16px',
-    cursor: 'pointer',
-    accentColor: '#01C7B1',
-  },
   itemCount: {
     fontSize: '11px',
     color: '#666666',
@@ -68,12 +62,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '8px',
-  },
-  footerStats: {
-    fontSize: '13px',
-    color: '#666666',
-    marginBottom: '8px',
-    textAlign: 'center' as const,
   },
 };
 
@@ -95,9 +83,9 @@ function SelectAllCheckbox({
     <input
       ref={ref}
       type="checkbox"
+      className="tasklist-checkbox"
       checked={allSelected}
       onChange={(e) => onChange(e.target.checked)}
-      style={styles.selectAll}
       aria-label="Select all in section"
     />
   );
@@ -200,20 +188,16 @@ export function ReviewScreen({
       </div>
 
       <div className="sticky-footer">
-        <div style={styles.footerStats}>
-          {createCount > 0 && `${createCount} to create`}
-          {closeCount > 0 && `${closeCount} to close`}
-          {createCount === 0 && closeCount === 0 && 'Select a section'}
-        </div>
-        <Button onClick={onSubmit} fullWidth disabled={createCount === 0}>
-          Create {createCount} {createCount === 1 ? 'Task' : 'Tasks'}
-        </Button>
-        {onClose && (
-          <div style={{ marginTop: '8px' }}>
-            <Button onClick={onClose} fullWidth variant="secondary" disabled={closeCount === 0}>
-              Close {closeCount} {closeCount === 1 ? 'Task' : 'Tasks'}
-            </Button>
-          </div>
+        {/* One action at a time: Close when the Open section is active,
+            otherwise Create (disabled until New items are selected). */}
+        {closeCount > 0 ? (
+          <Button onClick={onClose} fullWidth>
+            Close {closeCount} {closeCount === 1 ? 'Task' : 'Tasks'}
+          </Button>
+        ) : (
+          <Button onClick={onSubmit} fullWidth disabled={createCount === 0}>
+            Create {createCount} {createCount === 1 ? 'Task' : 'Tasks'}
+          </Button>
         )}
         <div style={{ textAlign: 'center', marginTop: '8px' }}>
           <button className="link-button" onClick={onBack}>
