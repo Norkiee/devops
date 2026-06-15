@@ -34,6 +34,15 @@ import { PartialFailureScreen } from './screens/PartialFailureScreen';
 // Union type for results (all work item types)
 type SubmitResult = CreateTaskResult | CreateUserStoryResult | CreateEpicResult | CreateFeatureResult;
 
+// Which Review section a task belongs to. New (create) and Open (close) are
+// mutually exclusive — an action targets one section at a time; Closed is
+// read-only with no action.
+type TaskSection = 'new' | 'open' | 'closed';
+function sectionOf(item: WorkItem): TaskSection {
+  if (!item.existing) return 'new';
+  return item.closed ? 'closed' : 'open';
+}
+
 export function App(): React.ReactElement {
   const [screen, setScreen] = useState<Screen>('home');
   const [error, setError] = useState<string | null>(null);
@@ -239,20 +248,46 @@ export function App(): React.ReactElement {
     []
   );
 
+  // Toggle one item. When turning it ON, deselect the *other* actionable
+  // section so only one of New/Open is ever selected at a time.
   const handleWorkItemToggle = useCallback((frameId: string, workItemId: string) => {
-    setFrameWorkItems((prev) =>
-      prev.map((fwi) =>
-        fwi.frameId === frameId
-          ? {
-              ...fwi,
-              workItems: fwi.workItems.map((item) =>
-                item.id === workItemId ? { ...item, selected: !item.selected } : item
-              ),
-            }
-          : fwi
-      )
-    );
+    setFrameWorkItems((prev) => {
+      const target = prev.flatMap((f) => f.workItems).find((i) => i.id === workItemId);
+      if (!target) return prev;
+      const turningOn = !target.selected;
+      const otherSection = sectionOf(target) === 'new' ? 'open' : 'new';
+      return prev.map((fwi) => ({
+        ...fwi,
+        workItems: fwi.workItems.map((item) => {
+          if (item.id === workItemId) return { ...item, selected: !item.selected };
+          if (turningOn && sectionOf(item) === otherSection) {
+            return { ...item, selected: false };
+          }
+          return item;
+        }),
+      }));
+    });
   }, []);
+
+  // Select/deselect every item in a section. Selecting one section clears the
+  // other (mutual exclusivity).
+  const handleSelectSection = useCallback(
+    (section: 'new' | 'open', selected: boolean) => {
+      const otherSection = section === 'new' ? 'open' : 'new';
+      setFrameWorkItems((prev) =>
+        prev.map((fwi) => ({
+          ...fwi,
+          workItems: fwi.workItems.map((item) => {
+            const sec = sectionOf(item);
+            if (sec === section) return { ...item, selected };
+            if (selected && sec === otherSection) return { ...item, selected: false };
+            return item;
+          }),
+        }))
+      );
+    },
+    []
+  );
 
   const handleRemoveTag = useCallback(
     (frameId: string, workItemId: string, tag: string) => {
@@ -668,6 +703,7 @@ export function App(): React.ReactElement {
           parentTitle={parentTitle}
           onWorkItemUpdate={handleWorkItemUpdate}
           onWorkItemToggle={handleWorkItemToggle}
+          onSelectSection={handleSelectSection}
           onRemoveTag={handleRemoveTag}
           onSubmit={handleSubmit}
           onClose={handleClose}

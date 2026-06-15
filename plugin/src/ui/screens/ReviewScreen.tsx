@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { FrameWorkItems, WorkItem, WorkItemType } from '../types';
 import { Button } from '../components/Button';
 import { WorkItemCard } from '../components/WorkItemCard';
-import { SectionGroup } from '../components/SectionGroup';
 
 interface ReviewScreenProps {
   frameWorkItems: FrameWorkItems[];
@@ -11,11 +10,14 @@ interface ReviewScreenProps {
   parentTitle: string;
   onWorkItemUpdate: (frameId: string, workItemId: string, updates: Partial<WorkItem>) => void;
   onWorkItemToggle: (frameId: string, workItemId: string) => void;
+  onSelectSection: (section: 'new' | 'open', selected: boolean) => void;
   onRemoveTag: (frameId: string, workItemId: string, tag: string) => void;
   onSubmit: () => void;
   onClose?: () => void;
   onBack: () => void;
 }
+
+type ItemWithFrame = WorkItem & { frameId: string };
 
 const styles: Record<string, React.CSSProperties> = {
   parentInfo: {
@@ -27,33 +29,33 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#0A6B60',
     marginBottom: '12px',
   },
-  frameGroup: {
-    marginBottom: '12px',
+  section: {
+    marginBottom: '16px',
   },
-  frameHeader: {
+  sectionHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '8px 12px',
     backgroundColor: '#f5f5f5',
     borderRadius: '6px',
-    cursor: 'pointer',
-    userSelect: 'none',
+    marginBottom: '8px',
   },
-  frameHeaderLeft: {
+  sectionHeaderLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
   },
-  chevron: {
-    fontSize: '12px',
-    color: '#666666',
-    transition: 'transform 0.2s',
-  },
-  frameName: {
+  sectionTitle: {
     fontSize: '13px',
     fontWeight: 600,
     color: '#333333',
+  },
+  selectAll: {
+    width: '16px',
+    height: '16px',
+    cursor: 'pointer',
+    accentColor: '#01C7B1',
   },
   itemCount: {
     fontSize: '11px',
@@ -66,8 +68,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '8px',
-    marginTop: '8px',
-    paddingLeft: '8px',
   },
   footerStats: {
     fontSize: '13px',
@@ -77,6 +77,32 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
+// Checkbox that supports the indeterminate (partial) state for "select all".
+function SelectAllCheckbox({
+  allSelected,
+  someSelected,
+  onChange,
+}: {
+  allSelected: boolean;
+  someSelected: boolean;
+  onChange: (checked: boolean) => void;
+}): React.ReactElement {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = someSelected && !allSelected;
+  }, [allSelected, someSelected]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={allSelected}
+      onChange={(e) => onChange(e.target.checked)}
+      style={styles.selectAll}
+      aria-label="Select all in section"
+    />
+  );
+}
+
 export function ReviewScreen({
   frameWorkItems,
   workItemType,
@@ -84,114 +110,61 @@ export function ReviewScreen({
   parentTitle,
   onWorkItemUpdate,
   onWorkItemToggle,
+  onSelectSection,
   onRemoveTag,
   onSubmit,
   onClose,
   onBack,
 }: ReviewScreenProps): React.ReactElement {
-  const [expandedFrames, setExpandedFrames] = useState<Set<string>>(
-    new Set(frameWorkItems.map((fwi) => fwi.frameId))
+  const allItems: ItemWithFrame[] = frameWorkItems.flatMap((fwi) =>
+    fwi.workItems.map((item) => ({ ...item, frameId: fwi.frameId }))
+  );
+  const newItems = allItems.filter((i) => !i.existing);
+  const openItems = allItems.filter((i) => i.existing && !i.closed);
+  const closedItems = allItems.filter((i) => i.existing && i.closed);
+
+  const totalItems = allItems.length;
+  const createCount = newItems.filter((i) => i.selected).length;
+  const closeCount = openItems.filter((i) => i.selected).length;
+
+  const renderCard = (item: ItemWithFrame) => (
+    <WorkItemCard
+      key={item.id}
+      workItemType={workItemType}
+      title={item.title}
+      description={item.description}
+      tags={selectedTags}
+      selected={item.selected}
+      existing={item.existing}
+      closed={item.closed}
+      onToggleSelect={() => onWorkItemToggle(item.frameId, item.id)}
+      onTitleChange={(title) => onWorkItemUpdate(item.frameId, item.id, { title })}
+      onDescriptionChange={(description) =>
+        onWorkItemUpdate(item.frameId, item.id, { description })
+      }
+      onRemoveTag={(tag) => onRemoveTag(item.frameId, item.id, tag)}
+    />
   );
 
-  const toggleFrame = (frameId: string) => {
-    setExpandedFrames((prev) => {
-      const next = new Set(prev);
-      if (next.has(frameId)) {
-        next.delete(frameId);
-      } else {
-        next.add(frameId);
-      }
-      return next;
-    });
-  };
-
-  const getLabels = (): { plural: string; singular: string; parent: string } => {
-    switch (workItemType) {
-      case 'Epic':
-        return { plural: 'Epics', singular: 'Epic', parent: 'Project' };
-      case 'Feature':
-        return { plural: 'Features', singular: 'Feature', parent: 'Epic' };
-      case 'UserStory':
-        return { plural: 'User Stories', singular: 'User Story', parent: 'Parent' };
-      case 'Task':
-      default:
-        return { plural: 'Tasks', singular: 'Task', parent: 'Story' };
-    }
-  };
-
-  const { plural: itemLabel, singular: itemLabelSingular, parent: parentLabel } = getLabels();
-
-  const totalItems = frameWorkItems.reduce((sum, fwi) => sum + fwi.workItems.length, 0);
-  const allItems = frameWorkItems.flatMap((fwi) => fwi.workItems);
-  // New tasks selected to create vs existing-open tasks selected to close.
-  const createCount = allItems.filter((i) => !i.existing && i.selected).length;
-  const closeCount = allItems.filter((i) => i.existing && !i.closed && i.selected).length;
-
-  // Group frames by section
-  const framesBySection: Record<string, FrameWorkItems[]> = {};
-  const ungroupedFrames: FrameWorkItems[] = [];
-
-  for (const fwi of frameWorkItems) {
-    if (fwi.sectionName) {
-      if (!framesBySection[fwi.sectionName]) {
-        framesBySection[fwi.sectionName] = [];
-      }
-      framesBySection[fwi.sectionName].push(fwi);
-    } else {
-      ungroupedFrames.push(fwi);
-    }
-  }
-
-  const renderFrameGroup = (fwi: FrameWorkItems) => {
-    const isExpanded = expandedFrames.has(fwi.frameId);
-    const frameSelectedCount = fwi.workItems.filter((item) => item.selected).length;
-
+  // Section with a select-all checkbox (New / Open).
+  const renderSection = (title: string, section: 'new' | 'open', items: ItemWithFrame[]) => {
+    const selected = items.filter((i) => i.selected).length;
     return (
-      <div key={fwi.frameId} style={styles.frameGroup}>
-        <div
-          style={styles.frameHeader}
-          onClick={() => toggleFrame(fwi.frameId)}
-        >
-          <div style={styles.frameHeaderLeft}>
-            <span
-              style={{
-                ...styles.chevron,
-                transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-              }}
-            >
-              ▶
-            </span>
-            <span style={styles.frameName}>{fwi.frameName}</span>
+      <div style={styles.section} key={section}>
+        <div style={styles.sectionHeader}>
+          <div style={styles.sectionHeaderLeft}>
+            <SelectAllCheckbox
+              allSelected={selected === items.length}
+              someSelected={selected > 0}
+              onChange={(checked) => onSelectSection(section, checked)}
+            />
+            <span style={styles.sectionTitle}>{title}</span>
           </div>
           <span style={styles.itemCount}>
-            {frameSelectedCount}/{fwi.workItems.length} {fwi.workItems.length === 1 ? itemLabelSingular.toLowerCase() : itemLabel.toLowerCase()}
+            {selected}/{items.length}
           </span>
         </div>
-
-        {isExpanded && (
-          <div style={styles.itemList}>
-            {fwi.workItems.map((item) => (
-              <WorkItemCard
-                key={item.id}
-                workItemType={workItemType}
-                title={item.title}
-                description={item.description}
-                tags={selectedTags}
-                selected={item.selected}
-                existing={item.existing}
-                closed={item.closed}
-                onToggleSelect={() => onWorkItemToggle(fwi.frameId, item.id)}
-                onTitleChange={(title) =>
-                  onWorkItemUpdate(fwi.frameId, item.id, { title })
-                }
-                onDescriptionChange={(description) =>
-                  onWorkItemUpdate(fwi.frameId, item.id, { description })
-                }
-                onRemoveTag={(tag) => onRemoveTag(fwi.frameId, item.id, tag)}
-              />
-            ))}
-          </div>
-        )}
+        <div style={styles.itemList}>{items.map(renderCard)}</div>
       </div>
     );
   };
@@ -200,55 +173,45 @@ export function ReviewScreen({
     <div className="screen">
       <div className="screen-header">
         <h2>
-          Review {itemLabel}{' '}
-          <span style={{ fontWeight: 400, color: '#999999' }}>
-            ({totalItems} total)
-          </span>
+          Review tasks{' '}
+          <span style={{ fontWeight: 400, color: '#999999' }}>({totalItems} total)</span>
         </h2>
-        <p>Edit or remove items before pushing to Azure</p>
+        <p>Pick one section to create or close — only one action at a time</p>
       </div>
 
       {parentTitle && (
         <div style={styles.parentInfo}>
-          Creating under {parentLabel}: <strong>{parentTitle}</strong>
+          Creating under Story: <strong>{parentTitle}</strong>
         </div>
       )}
 
       <div className="task-list">
-        {/* Render grouped frames by section */}
-        {Object.entries(framesBySection).map(([sectionName, frames]) => (
-          <SectionGroup
-            key={sectionName}
-            sectionName={sectionName}
-            frameCount={frames.length}
-          >
-            {frames.map(renderFrameGroup)}
-          </SectionGroup>
-        ))}
-
-        {/* Render ungrouped frames */}
-        {ungroupedFrames.map(renderFrameGroup)}
+        {newItems.length > 0 && renderSection('New tasks', 'new', newItems)}
+        {openItems.length > 0 && renderSection('Open tasks', 'open', openItems)}
+        {closedItems.length > 0 && (
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <span style={styles.sectionTitle}>Closed</span>
+              <span style={styles.itemCount}>{closedItems.length}</span>
+            </div>
+            <div style={styles.itemList}>{closedItems.map(renderCard)}</div>
+          </div>
+        )}
       </div>
 
       <div className="sticky-footer">
         <div style={styles.footerStats}>
           {createCount > 0 && `${createCount} to create`}
-          {createCount > 0 && closeCount > 0 && ' · '}
           {closeCount > 0 && `${closeCount} to close`}
-          {createCount === 0 && closeCount === 0 && 'Nothing selected'}
+          {createCount === 0 && closeCount === 0 && 'Select a section'}
         </div>
         <Button onClick={onSubmit} fullWidth disabled={createCount === 0}>
-          Create {createCount} {createCount === 1 ? itemLabelSingular : itemLabel}
+          Create {createCount} {createCount === 1 ? 'Task' : 'Tasks'}
         </Button>
         {onClose && (
           <div style={{ marginTop: '8px' }}>
-            <Button
-              onClick={onClose}
-              fullWidth
-              variant="secondary"
-              disabled={closeCount === 0}
-            >
-              Close {closeCount} {closeCount === 1 ? itemLabelSingular : itemLabel}
+            <Button onClick={onClose} fullWidth variant="secondary" disabled={closeCount === 0}>
+              Close {closeCount} {closeCount === 1 ? 'Task' : 'Tasks'}
             </Button>
           </div>
         )}
