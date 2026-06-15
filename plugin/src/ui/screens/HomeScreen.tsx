@@ -64,9 +64,9 @@ export function HomeScreen({
           <div style={styles.iconSquare} />
           <div style={styles.iconSquare} />
         </div>
-        <h2 style={styles.heading}>Select frames or sections</h2>
+        <h2 style={styles.heading}>Select tasklist frame</h2>
         <p style={styles.subtext}>
-          Select frames or sections in Figma to generate Azure DevOps work items
+          Select the tasklist frame in Figma to create Azure DevOps tasks
         </p>
       </div>
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
