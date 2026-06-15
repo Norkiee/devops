@@ -41,12 +41,7 @@ export function HomeScreen({
     );
   }, []);
 
-  const getButtonText = () => {
-    if (sectionCount > 0) {
-      return `Continue with ${sectionCount} section${sectionCount > 1 ? 's' : ''} (${frameCount} frame${frameCount > 1 ? 's' : ''})`;
-    }
-    return `Continue with ${frameCount} frame${frameCount > 1 ? 's' : ''}`;
-  };
+  const hasSelection = frameCount > 0 || sectionCount > 0;
 
   return (
     <div className="screen" style={{ alignItems: 'center', textAlign: 'center' }}>
@@ -65,15 +60,19 @@ export function HomeScreen({
             </clipPath>
           </defs>
         </svg>
-        <h2 style={styles.heading}>Select tasklist frame</h2>
+        <h2 style={styles.heading}>
+          {hasSelection ? 'Frame is selected' : 'Select tasklist frame'}
+        </h2>
         <p style={styles.subtext}>
-          Select the tasklist frame in Figma to create Azure DevOps tasks
+          {hasSelection
+            ? 'Ready to create Azure DevOps tasks from this tasklist'
+            : 'Select the tasklist frame in Figma to create Azure DevOps tasks'}
         </p>
       </div>
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        {frameCount > 0 && (
+        {hasSelection && (
           <Button onClick={onContinue} fullWidth>
-            {getButtonText()}
+            Continue
           </Button>
         )}
         {isAuthenticated && onLogout && (
