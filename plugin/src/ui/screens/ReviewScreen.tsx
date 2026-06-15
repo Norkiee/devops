@@ -167,7 +167,7 @@ export function ReviewScreen({
         <p>Pick one section to create or close — only one action at a time</p>
       </div>
 
-      {parentTitle && (
+      {parentTitle && createCount > 0 && (
         <div style={styles.parentInfo}>
           Creating under Story: <strong>{parentTitle}</strong>
         </div>
