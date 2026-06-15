@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FrameWorkItems, WorkItem, WorkItemType } from '../types';
 import { Button } from '../components/Button';
 import { WorkItemCard } from '../components/WorkItemCard';
@@ -50,6 +50,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '13px',
     fontWeight: 600,
     color: '#333333',
+  },
+  chevron: {
+    fontSize: '10px',
+    color: '#666666',
+    transition: 'transform 0.15s',
+    display: 'inline-block',
   },
   itemCount: {
     fontSize: '11px',
@@ -109,9 +115,10 @@ export function ReviewScreen({
   );
   const newItems = allItems.filter((i) => !i.existing);
   const openItems = allItems.filter((i) => i.existing && !i.closed);
+  const closedItems = allItems.filter((i) => i.existing && i.closed);
 
-  // Closed tasks are tracked for dedup but not shown in Review.
-  const totalItems = newItems.length + openItems.length;
+  const totalItems = allItems.length;
+  const [closedOpen, setClosedOpen] = useState(false);
   const createCount = newItems.filter((i) => i.selected).length;
   const closeCount = openItems.filter((i) => i.selected).length;
 
@@ -176,6 +183,28 @@ export function ReviewScreen({
       <div className="task-list">
         {newItems.length > 0 && renderSection('New tasks', 'new', newItems)}
         {openItems.length > 0 && renderSection('Open tasks', 'open', openItems)}
+        {closedItems.length > 0 && (
+          <div style={styles.section}>
+            <div
+              style={{ ...styles.sectionHeader, cursor: 'pointer' }}
+              onClick={() => setClosedOpen((o) => !o)}
+            >
+              <div style={styles.sectionHeaderLeft}>
+                <span
+                  style={{
+                    ...styles.chevron,
+                    transform: closedOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                  }}
+                >
+                  ▶
+                </span>
+                <span style={styles.sectionTitle}>Closed</span>
+              </div>
+              <span style={styles.itemCount}>{closedItems.length}</span>
+            </div>
+            {closedOpen && <div style={styles.itemList}>{closedItems.map(renderCard)}</div>}
+          </div>
+        )}
       </div>
 
       <div className="sticky-footer">
