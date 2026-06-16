@@ -27,9 +27,14 @@ export function getAccessToken(req: VercelRequest): string | null {
   return authHeader.slice(7);
 }
 
+// Azure DevOps org names are alphanumeric with internal hyphens/underscores and
+// dots. Reject anything else (slashes, whitespace, control chars) so the value
+// can't be used for path/query injection when interpolated into request URLs.
+const ORG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+
 export function getOrg(req: VercelRequest): string | null {
   const org = req.query.org;
-  if (!org || typeof org !== 'string') {
+  if (!org || typeof org !== 'string' || !ORG_PATTERN.test(org)) {
     return null;
   }
   return org;

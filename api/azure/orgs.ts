@@ -28,7 +28,7 @@ export default async function handler(
       res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
       return;
     }
-    const message = error instanceof Error ? error.message : 'Failed to fetch organizations';
-    res.status(500).json({ error: message });
+    // Detail is logged above; don't leak raw Azure/internal error text to clients.
+    res.status(500).json({ error: 'Failed to fetch organizations' });
   }
 }

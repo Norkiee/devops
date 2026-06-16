@@ -56,8 +56,14 @@ export function PartialFailureScreen({
   onRetry,
   onViewSuccessful,
 }: PartialFailureScreenProps): React.ReactElement {
-  const successCount = results.filter((r) => r.success).length;
+  const createdCount = results.filter(
+    (r) => r.success || ('taskId' in r && typeof r.azureTaskId === 'number')
+  ).length;
   const failCount = results.filter((r) => !r.success).length;
+  const retryableCount = results.filter(
+    (r) => !r.success && (!('taskId' in r) || typeof r.azureTaskId !== 'number')
+  ).length;
+  const viewableCount = results.filter((r) => 'taskUrl' in r && !!r.taskUrl).length;
 
   const getLabels = (): { singular: string; plural: string; button: string } => {
     switch (workItemType) {
@@ -79,10 +85,10 @@ export function PartialFailureScreen({
     <div className="screen screen-center">
       <div style={styles.icon}>!</div>
       <h2 style={styles.heading}>
-        {successCount} of {results.length} {results.length === 1 ? singular : plural} created
+        {createdCount} of {results.length} {results.length === 1 ? singular : plural} created
       </h2>
       <p style={styles.subtext}>
-        {failCount} {failCount === 1 ? singular : plural} failed to create
+        {failCount} {failCount === 1 ? singular : plural} need attention
       </p>
 
       <div className="progress-list" style={{ marginTop: '12px' }}>
@@ -109,12 +115,14 @@ export function PartialFailureScreen({
       </div>
 
       <div className="screen-footer" style={styles.buttons}>
-        <Button onClick={onRetry} fullWidth>
-          Retry Failed {button}
-        </Button>
-        {successCount > 0 && (
+        {retryableCount > 0 && (
+          <Button onClick={onRetry} fullWidth>
+            Retry Failed {button}
+          </Button>
+        )}
+        {viewableCount > 0 && (
           <Button onClick={onViewSuccessful} variant="secondary" fullWidth>
-            View Successful {button}
+            View Created {button}
           </Button>
         )}
       </div>

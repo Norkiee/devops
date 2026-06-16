@@ -34,7 +34,8 @@ interface SelectProjectScreenProps {
     parentTitle: string;
   }) => void;
   onSessionExpired: () => void;
-  onRefreshToken: () => Promise<void>;
+  // Resolves to the refreshed access token; callers may ignore the value.
+  onRefreshToken: () => Promise<string>;
   onBack: () => void;
 }
 
@@ -457,8 +458,10 @@ export function SelectProjectScreen({
         if (epicId) return !!epicDetails;
         return false;
       case 'Task':
-        // Tasks need a User Story parent (Epic is optional)
-        return !!(storyId && storyDetails);
+        // A User Story parent is optional (some teams list tasks with no story).
+        // If one is chosen, wait for its details before continuing.
+        if (storyId) return !!storyDetails;
+        return true;
       default:
         return false;
     }
@@ -628,10 +631,13 @@ export function SelectProjectScreen({
             value={storyId}
             onChange={setStoryId}
             placeholder={loading ? 'Loading...' : 'Select a user story'}
-            options={stories.map((s) => ({
-              value: s.id.toString(),
-              label: `#${s.id} - ${s.title}`,
-            }))}
+            options={[
+              { value: '', label: '(No user story)' },
+              ...stories.map((s) => ({
+                value: s.id.toString(),
+                label: `#${s.id} - ${s.title}`,
+              })),
+            ]}
           />
         )}
 

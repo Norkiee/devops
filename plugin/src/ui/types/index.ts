@@ -102,7 +102,9 @@ export interface TaskToSubmit {
   title: string;
   description?: string;
   tags: string[];
-  parentStoryId: number;
+  // Optional: some teams list tasks with no parent story, so tasks can be
+  // created unparented.
+  parentStoryId?: number;
 }
 
 export interface CreateTaskResult {
@@ -110,6 +112,7 @@ export interface CreateTaskResult {
   success: boolean;
   azureTaskId?: number;
   taskUrl?: string;
+  stateTransitioned?: boolean;
   error?: string;
 }
 

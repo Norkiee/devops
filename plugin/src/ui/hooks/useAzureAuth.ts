@@ -8,7 +8,7 @@ interface UseAzureAuthResult {
   sessionId: string | null;
   authError: string | null;
   startAuth: (onComplete?: () => void) => void;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<string>;
   logout: () => void;
   clearAuthError: () => void;
 }
@@ -27,6 +27,8 @@ export function useAzureAuth(): UseAzureAuthResult {
   const pollInterval = useRef<number | null>(null);
   const pollTimeout = useRef<number | null>(null);
   const hasRestoredFromStorage = useRef(false);
+  // Shared in-flight refresh so concurrent callers don't each rotate the token.
+  const refreshPromise = useRef<Promise<string> | null>(null);
 
   const AUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -123,20 +125,30 @@ export function useAzureAuth(): UseAzureAuthResult {
     }, 2000);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<string> => {
     if (!sessionId) {
       // No session to refresh - throw so caller knows to redirect to connect
       throw new Error('No session to refresh');
     }
-    try {
-      const newToken = await refreshToken(sessionId);
-      setAccessToken(newToken);
-    } catch {
-      setAccessToken(null);
-      setSessionId(null);
-      setStorage({ accessToken: undefined, sessionId: undefined });
-      throw new Error('Token refresh failed');
-    }
+    // Azure rotates the refresh token on every use, so two overlapping refreshes
+    // would invalidate each other and kill the session. Share one in-flight call.
+    if (refreshPromise.current) return refreshPromise.current;
+    const p = (async (): Promise<string> => {
+      try {
+        const newToken = await refreshToken(sessionId);
+        setAccessToken(newToken);
+        return newToken;
+      } catch {
+        setAccessToken(null);
+        setSessionId(null);
+        setStorage({ accessToken: undefined, sessionId: undefined });
+        throw new Error('Token refresh failed');
+      } finally {
+        refreshPromise.current = null;
+      }
+    })();
+    refreshPromise.current = p;
+    return p;
   }, [sessionId]);
 
   const logout = useCallback(() => {

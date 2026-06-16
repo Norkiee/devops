@@ -13,7 +13,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { createTasks, fetchExistingWorkItems, closeTasks } from './services/api';
+import { createTasks, fetchExistingWorkItems, closeTasks, AuthError } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -117,6 +117,30 @@ export function App(): React.ReactElement {
     auth.logout();
     setScreen('connect-azure');
   }, [auth]);
+
+  // Run an authenticated API call, transparently refreshing the access token
+  // once on a 401 and retrying with the fresh token. If the refresh itself
+  // fails, surface an AuthError so the caller routes to the reconnect screen
+  // instead of dropping the user's work on a recoverable expiry.
+  const runWithAuth = useCallback(
+    async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
+      try {
+        return await fn(auth.accessToken!);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AuthError') {
+          let token: string;
+          try {
+            token = await auth.refresh();
+          } catch {
+            throw new AuthError();
+          }
+          return await fn(token);
+        }
+        throw err;
+      }
+    },
+    [auth]
+  );
 
   // Explicit sign-out: clears the local token/session and resets the selected
   // Azure org/project so a different account starts clean. The next connect
@@ -309,7 +333,7 @@ export function App(): React.ReactElement {
     const pairs = submitResults
       .filter(
         (r): r is CreateTaskResult =>
-          'taskId' in r && r.success && typeof r.azureTaskId === 'number'
+          'taskId' in r && typeof r.azureTaskId === 'number'
       )
       .map((r) => ({
         hash: r.taskId.replace(/^task-/, ''),
@@ -333,21 +357,16 @@ export function App(): React.ReactElement {
     setSubmittedIds(new Set());
 
     try {
-      if (!hierarchyContext.userStory?.id) {
-        throw new Error('No user story selected for tasks');
-      }
+      // A parent user story is optional — tasks can be created unparented.
       const tasks: TaskToSubmit[] = selectedItems.map((item) => ({
         taskId: item.id,
         title: item.title,
         description: item.description,
         tags: selectedTags,
-        parentStoryId: hierarchyContext.userStory!.id,
+        parentStoryId: hierarchyContext.userStory?.id,
       }));
-      const submitResults = await createTasks(
-        auth.accessToken!,
-        azureOrg,
-        azureProjectId,
-        tasks
+      const submitResults = await runWithAuth((token) =>
+        createTasks(token, azureOrg, azureProjectId, tasks)
       );
 
       setResults(submitResults);
@@ -375,6 +394,7 @@ export function App(): React.ReactElement {
     azureProjectId,
     handleSessionExpired,
     stampDedup,
+    runWithAuth,
   ]);
 
   // Close the selected existing-and-open tasks: transition them to the
@@ -391,11 +411,8 @@ export function App(): React.ReactElement {
     setSubmittedIds(new Set());
 
     try {
-      const closeResults = await closeTasks(
-        auth.accessToken!,
-        azureOrg,
-        azureProjectId,
-        closeable.map((i) => i.azureId as number)
+      const closeResults = await runWithAuth((token) =>
+        closeTasks(token, azureOrg, azureProjectId, closeable.map((i) => i.azureId as number))
       );
       setResults(closeResults);
       setSubmittedIds(new Set(closeable.map((i) => i.id)));
@@ -415,12 +432,16 @@ export function App(): React.ReactElement {
     azureOrg,
     azureProjectId,
     handleSessionExpired,
+    runWithAuth,
   ]);
 
   const handleRetry = useCallback(async () => {
     const selectedItems = getSelectedWorkItems();
     const failedIds = results
       .filter((r) => !r.success)
+      // If Azure returned an id, the Task already exists. Do not retry creation,
+      // because that would duplicate it; the user can open it and adjust state.
+      .filter((r) => !('taskId' in r) || typeof r.azureTaskId !== 'number')
       .map((r) => ('taskId' in r ? r.taskId : ''));
     const failedItems = selectedItems.filter((item) => failedIds.includes(item.id));
 
@@ -435,13 +456,10 @@ export function App(): React.ReactElement {
         title: item.title,
         description: item.description,
         tags: selectedTags,
-        parentStoryId: hierarchyContext.userStory!.id,
+        parentStoryId: hierarchyContext.userStory?.id,
       }));
-      const retryResults = await createTasks(
-        auth.accessToken!,
-        azureOrg,
-        azureProjectId,
-        tasks
+      const retryResults = await runWithAuth((token) =>
+        createTasks(token, azureOrg, azureProjectId, tasks)
       );
 
       // Merge retried results back over the originals by taskId.
@@ -477,10 +495,11 @@ export function App(): React.ReactElement {
     azureProjectId,
     handleSessionExpired,
     stampDedup,
+    runWithAuth,
   ]);
 
   const handleViewInAzure = useCallback(() => {
-    const url = results.find((r) => r.success)?.taskUrl;
+    const url = results.find((r) => r.taskUrl)?.taskUrl;
     if (url) window.open(url, '_blank');
   }, [results]);
 
@@ -502,7 +521,7 @@ export function App(): React.ReactElement {
       title: item.title,
       description: item.description,
       tags: selectedTags,
-      parentStoryId: hierarchyContext.userStory?.id || 0,
+      parentStoryId: hierarchyContext.userStory?.id,
     }));
   }, [getSelectedWorkItems, selectedTags, hierarchyContext]);
 

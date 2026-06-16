@@ -1,10 +1,11 @@
 {
   "name": "Tasklist",
-  "id": "tasklist-figma-plugin",
+  "id": "1648746769169786327",
   "api": "1.0.0",
   "main": "dist/main.js",
   "ui": "dist/ui.html",
   "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": [
       "https://devops-omega-tan.vercel.app",

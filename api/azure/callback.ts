@@ -30,7 +30,11 @@ export default async function handler(
 
   if (error) {
     console.error('OAuth error:', error, error_description);
-    res.status(400).send(`Authentication failed: ${error_description}`);
+    // Never echo provider/query input into the HTML response — it would be a
+    // reflected-XSS sink (res.send of a string defaults to text/html). Detail
+    // is logged server-side above; the user gets a static plain-text message.
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(400).send('Authentication failed. Please close this window and try connecting again.');
     return;
   }
 
@@ -75,7 +79,8 @@ export default async function handler(
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
       console.error('Token exchange failed:', errorData);
-      res.status(500).send(`Token exchange failed: ${errorData}`);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.status(500).send('Authentication failed during token exchange. Please close this window and try again.');
       return;
     }
 
@@ -216,7 +221,7 @@ export default async function handler(
 </html>`);
   } catch (err) {
     console.error('OAuth callback error:', err);
-    const message = err instanceof Error ? err.message : String(err);
-    res.status(500).send(`Authentication failed: ${message}`);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(500).send('Authentication failed. Please close this window and try again.');
   }
 }

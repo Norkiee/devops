@@ -7,18 +7,31 @@ import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 // flagging auth errors via the callback. `idAt` supplies the taskId for the
 // rejected case, where the worker's value isn't available.
 function toResults(
-  settled: PromiseSettledResult<{ taskId: string; azureTaskId: number; taskUrl: string }>[],
+  settled: PromiseSettledResult<{
+    taskId: string;
+    azureTaskId: number;
+    taskUrl: string;
+    stateTransitioned?: boolean;
+    transitionError?: string;
+  }>[],
   idAt: (index: number) => string,
   action: 'creating' | 'closing',
   onAuthError: () => void
 ): CreateTaskResult[] {
   return settled.map((s, index) => {
     if (s.status === 'fulfilled') {
+      const transitionFailed = s.value.stateTransitioned === false;
       return {
         taskId: s.value.taskId,
-        success: true,
+        success: !transitionFailed,
         azureTaskId: s.value.azureTaskId,
         taskUrl: s.value.taskUrl,
+        stateTransitioned: s.value.stateTransitioned,
+        ...(transitionFailed && {
+          error:
+            s.value.transitionError ||
+            'Task was created but could not be moved to the in-progress state.',
+        }),
       };
     }
     if (isAzureAuthError(s.reason)) onAuthError();
@@ -57,6 +70,24 @@ export default async function handler(
     return;
   }
 
+  // Work item ids are interpolated into Azure URLs — require real positive
+  // integers so a crafted string can't alter the request path.
+  if (hasCloseIds && !closeIds!.every((id) => Number.isInteger(id) && id > 0)) {
+    res.status(400).json({ error: 'closeIds must be positive integers' });
+    return;
+  }
+  // parentStoryId is optional (tasks can be unparented), but when present it's
+  // interpolated into an Azure URL — require a positive integer.
+  if (
+    hasTasks &&
+    !tasks!.every(
+      (t) => t.parentStoryId === undefined || (Number.isInteger(t.parentStoryId) && t.parentStoryId > 0)
+    )
+  ) {
+    res.status(400).json({ error: 'parentStoryId must be a positive integer when provided' });
+    return;
+  }
+
   let hasAuthError = false;
 
   try {
@@ -87,7 +118,13 @@ export default async function handler(
               assignedTo: currentUser.emailAddress,
             }
           );
-          return { taskId: task.taskId, azureTaskId: result.id, taskUrl: result.url };
+          return {
+            taskId: task.taskId,
+            azureTaskId: result.id,
+            taskUrl: result.url,
+            stateTransitioned: result.stateTransitioned,
+            transitionError: result.transitionError,
+          };
         }
       );
 

@@ -198,7 +198,7 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
     // these lines. Resolve the node by the id captured during parse.
     const pairs = (msg.data as { hash: string; azureId: number }[]) || [];
     const node = dedupNodeId
-      ? (figma.getNodeById(dedupNodeId) as SceneNode | null)
+      ? ((await figma.getNodeByIdAsync(dedupNodeId)) as SceneNode | null)
       : null;
     if (node && 'getPluginData' in node && pairs.length > 0) {
       const map = readDedupMap(node);
@@ -214,7 +214,7 @@ figma.ui.onmessage = async (msg: { type: string; data?: unknown; height?: number
     // as new on this and future runs.
     const hashes = (msg.data as string[]) || [];
     const node = dedupNodeId
-      ? (figma.getNodeById(dedupNodeId) as SceneNode | null)
+      ? ((await figma.getNodeByIdAsync(dedupNodeId)) as SceneNode | null)
       : null;
     if (node && 'getPluginData' in node && hashes.length > 0) {
       const map = readDedupMap(node);

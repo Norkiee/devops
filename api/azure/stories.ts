@@ -69,6 +69,12 @@ export default async function handler(
       return;
     }
 
+    // parentEpicId is interpolated into an Azure URL — require a positive integer.
+    if (!stories.every((s) => Number.isInteger(s.parentEpicId) && s.parentEpicId > 0)) {
+      res.status(400).json({ error: 'Each story requires a valid parentEpicId' });
+      return;
+    }
+
     // Get current user to auto-assign stories
     let currentUserEmail: string | undefined;
     try {

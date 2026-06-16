@@ -83,6 +83,15 @@ export default async function handler(
       return;
     }
 
+    // parentEpicId is optional, but when present it's interpolated into an Azure
+    // URL — reject anything that isn't a positive integer.
+    if (!features.every(
+      (f) => f.parentEpicId === undefined || (Number.isInteger(f.parentEpicId) && f.parentEpicId > 0)
+    )) {
+      res.status(400).json({ error: 'parentEpicId must be a positive integer when provided' });
+      return;
+    }
+
     try {
       // Get current user to auto-assign features
       const currentUser = await getCurrentUser(auth.accessToken);

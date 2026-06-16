@@ -17,6 +17,7 @@ interface ReviewScreenProps {
   onBack: () => void;
 }
 
+type TabKey = 'new' | 'open' | 'closed';
 type ItemWithFrame = WorkItem & { frameId: string };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -29,10 +30,45 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#0A6B60',
     marginBottom: '12px',
   },
-  section: {
-    marginBottom: '16px',
+  tabBar: {
+    display: 'flex',
+    gap: '4px',
+    borderBottom: '1px solid #E6ECF0',
+    marginBottom: '12px',
   },
-  sectionHeader: {
+  tab: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '8px 4px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#666666',
+    background: 'none',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    cursor: 'pointer',
+    fontFamily: "'Sora', -apple-system, BlinkMacSystemFont, sans-serif",
+  },
+  tabActive: {
+    color: '#01786A',
+    borderBottom: '2px solid #01786A',
+  },
+  tabBadge: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#666666',
+    backgroundColor: '#E6ECF0',
+    padding: '1px 7px',
+    borderRadius: '10px',
+  },
+  tabBadgeActive: {
+    color: '#01786A',
+    backgroundColor: '#E6FAF7',
+  },
+  selectAllRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -41,21 +77,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '6px',
     marginBottom: '8px',
   },
-  sectionHeaderLeft: {
+  selectAllLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
   },
-  sectionTitle: {
+  selectAllLabel: {
     fontSize: '13px',
     fontWeight: 600,
     color: '#333333',
-  },
-  chevron: {
-    fontSize: '10px',
-    color: '#666666',
-    transition: 'transform 0.15s',
-    display: 'inline-block',
   },
   itemCount: {
     fontSize: '11px',
@@ -68,6 +98,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '8px',
+  },
+  emptyState: {
+    textAlign: 'center' as const,
+    color: '#999999',
+    padding: '24px',
+    fontSize: '13px',
   },
 };
 
@@ -92,7 +128,7 @@ function SelectAllCheckbox({
       className="tasklist-checkbox"
       checked={allSelected}
       onChange={(e) => onChange(e.target.checked)}
-      aria-label="Select all in section"
+      aria-label="Select all in tab"
     />
   );
 }
@@ -118,9 +154,26 @@ export function ReviewScreen({
   const closedItems = allItems.filter((i) => i.existing && i.closed);
 
   const totalItems = allItems.length;
-  const [closedOpen, setClosedOpen] = useState(false);
   const createCount = newItems.filter((i) => i.selected).length;
   const closeCount = openItems.filter((i) => i.selected).length;
+
+  // Only surface tabs that have items; order is New → Open → Closed.
+  const tabs: { key: TabKey; label: string; count: number }[] = [];
+  if (newItems.length > 0) tabs.push({ key: 'new', label: 'New', count: newItems.length });
+  if (openItems.length > 0) tabs.push({ key: 'open', label: 'Open', count: openItems.length });
+  if (closedItems.length > 0) tabs.push({ key: 'closed', label: 'Closed', count: closedItems.length });
+
+  const [activeTab, setActiveTab] = useState<TabKey>(tabs[0]?.key ?? 'new');
+  // Keep the active tab valid as sections appear or empty out (e.g. after the
+  // user clears the closed tasks, the Closed tab disappears).
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some((t) => t.key === activeTab)) {
+      setActiveTab(tabs[0].key);
+    }
+  }, [tabs, activeTab]);
+
+  const activeItems =
+    activeTab === 'new' ? newItems : activeTab === 'open' ? openItems : closedItems;
 
   const renderCard = (item: ItemWithFrame) => (
     <WorkItemCard
@@ -141,25 +194,22 @@ export function ReviewScreen({
     />
   );
 
-  // Section with a select-all checkbox (New / Open).
-  const renderSection = (title: string, section: 'new' | 'open', items: ItemWithFrame[]) => {
+  // Select-all row, shown for the actionable tabs (New / Open) only.
+  const renderSelectAll = (section: 'new' | 'open', items: ItemWithFrame[]) => {
     const selected = items.filter((i) => i.selected).length;
     return (
-      <div style={styles.section} key={section}>
-        <div style={styles.sectionHeader}>
-          <div style={styles.sectionHeaderLeft}>
-            <SelectAllCheckbox
-              allSelected={selected === items.length}
-              someSelected={selected > 0}
-              onChange={(checked) => onSelectSection(section, checked)}
-            />
-            <span style={styles.sectionTitle}>{title}</span>
-          </div>
-          <span style={styles.itemCount}>
-            {selected}/{items.length}
-          </span>
+      <div style={styles.selectAllRow}>
+        <div style={styles.selectAllLeft}>
+          <SelectAllCheckbox
+            allSelected={items.length > 0 && selected === items.length}
+            someSelected={selected > 0}
+            onChange={(checked) => onSelectSection(section, checked)}
+          />
+          <span style={styles.selectAllLabel}>Select all</span>
         </div>
-        <div style={styles.itemList}>{items.map(renderCard)}</div>
+        <span style={styles.itemCount}>
+          {selected}/{items.length}
+        </span>
       </div>
     );
   };
@@ -171,52 +221,62 @@ export function ReviewScreen({
           Review tasks{' '}
           <span style={{ fontWeight: 400, color: '#999999' }}>({totalItems} total)</span>
         </h2>
-        <p>Pick one section to create or close — only one action at a time</p>
+        <p>Pick one tab to create or close — only one action at a time</p>
       </div>
 
-      {parentTitle && createCount > 0 && (
+      {parentTitle && activeTab === 'new' && createCount > 0 && (
         <div style={styles.parentInfo}>
           Creating under Story: <strong>{parentTitle}</strong>
         </div>
       )}
 
-      <div className="task-list">
-        {newItems.length > 0 && renderSection('New tasks', 'new', newItems)}
-        {openItems.length > 0 && renderSection('Open tasks', 'open', openItems)}
-        {closedItems.length > 0 && (
-          <div style={styles.section}>
-            <div
-              style={{ ...styles.sectionHeader, cursor: 'pointer' }}
-              onClick={() => setClosedOpen((o) => !o)}
-            >
-              <div style={styles.sectionHeaderLeft}>
-                <span
-                  style={{
-                    ...styles.chevron,
-                    transform: closedOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                  }}
+      {tabs.length > 0 ? (
+        <>
+          <div style={styles.tabBar} role="tablist">
+            {tabs.map((t) => {
+              const active = t.key === activeTab;
+              return (
+                <button
+                  key={t.key}
+                  role="tab"
+                  aria-selected={active}
+                  style={{ ...styles.tab, ...(active ? styles.tabActive : {}) }}
+                  onClick={() => setActiveTab(t.key)}
                 >
-                  ▶
-                </span>
-                <span style={styles.sectionTitle}>Closed</span>
-              </div>
-              <span style={styles.itemCount}>{closedItems.length}</span>
-            </div>
-            {closedOpen && <div style={styles.itemList}>{closedItems.map(renderCard)}</div>}
+                  {t.label}
+                  <span
+                    style={{ ...styles.tabBadge, ...(active ? styles.tabBadgeActive : {}) }}
+                  >
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        )}
-      </div>
+
+          <div className="task-list">
+            {(activeTab === 'new' || activeTab === 'open') &&
+              renderSelectAll(activeTab, activeItems)}
+            <div style={styles.itemList}>{activeItems.map(renderCard)}</div>
+          </div>
+        </>
+      ) : (
+        <div className="task-list">
+          <p style={styles.emptyState}>No tasks to review.</p>
+        </div>
+      )}
 
       <div className="sticky-footer">
-        {/* One action at a time: Close when the Open section is active,
-            otherwise Create (disabled until New items are selected). */}
-        {closeCount > 0 ? (
-          <Button onClick={onClose} fullWidth>
-            Close {closeCount} {closeCount === 1 ? 'Task' : 'Tasks'}
-          </Button>
-        ) : (
+        {/* The primary action follows the active tab, so only one action is ever
+            available at a time. */}
+        {activeTab === 'new' && newItems.length > 0 && (
           <Button onClick={onSubmit} fullWidth disabled={createCount === 0}>
             Create {createCount} {createCount === 1 ? 'Task' : 'Tasks'}
+          </Button>
+        )}
+        {activeTab === 'open' && openItems.length > 0 && (
+          <Button onClick={onClose} fullWidth disabled={closeCount === 0}>
+            Close {closeCount} {closeCount === 1 ? 'Task' : 'Tasks'}
           </Button>
         )}
         <div style={{ textAlign: 'center', marginTop: '8px' }}>

@@ -79,6 +79,14 @@ interface AzureApiOptions {
   accessToken: string;
 }
 
+// Azure org and project segments come from client input and are interpolated
+// into request URLs. Encode them so a value containing '/', '?', '#', or
+// whitespace can't break out of its path segment (path/query injection). These
+// requests always use the caller's own token, so this is defense-in-depth.
+function seg(value: string): string {
+  return encodeURIComponent(value);
+}
+
 // Extract target IDs from WorkItemLinks response, filtering out the source entry
 function extractTargetIds(response: WorkItemRelationsResponse, limit = 50): number[] {
   if (!response.workItemRelations || response.workItemRelations.length === 0) {
@@ -220,7 +228,7 @@ export async function listProjects(
   opts: AzureApiOptions
 ): Promise<AzureProject[]> {
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/_apis/projects?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/_apis/projects?api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const data = (await response.json()) as { value: Array<{ id: string; name: string }> };
@@ -245,7 +253,7 @@ export async function queryStories(
   };
 
   const wiqlResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
@@ -263,7 +271,7 @@ export async function queryStories(
   const idsParam = ids.join(',');
 
   const detailResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const detailData = (await detailResponse.json()) as {
@@ -282,7 +290,7 @@ export async function getTags(
   opts: AzureApiOptions & { projectId: string }
 ): Promise<string[]> {
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/tags?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/tags?api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const data = (await response.json()) as { value: Array<{ name: string }> };
@@ -305,7 +313,7 @@ export async function getTaskStates(
 ): Promise<TaskStateInfo[]> {
   try {
     const response = await azureFetch(
-      `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitemtypes/Task/states?api-version=${AZURE_API_VERSION}`,
+      `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitemtypes/Task/states?api-version=${AZURE_API_VERSION}`,
       opts.accessToken
     );
     const data = (await response.json()) as {
@@ -345,7 +353,7 @@ export async function setTaskState(
   state: string
 ): Promise<{ id: number; url: string }> {
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/${id}?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems/${id}?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'PATCH',
@@ -361,14 +369,14 @@ export async function setTaskState(
   };
   return {
     id: data.id,
-    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+    url: data._links?.html?.href || `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_workitems/edit/${data.id}`,
   };
 }
 
 export async function createTask(
   opts: AzureApiOptions & { projectId: string },
   task: AzureTask
-): Promise<{ id: number; url: string }> {
+): Promise<{ id: number; url: string; stateTransitioned: boolean; transitionError?: string }> {
   const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: task.title },
     {
@@ -376,15 +384,20 @@ export async function createTask(
       path: '/fields/System.Tags',
       value: task.tags.join('; '),
     },
-    {
+  ];
+
+  // Link to a parent user story only when one was chosen. Some teams list tasks
+  // with no parent, so an unparented Task is valid.
+  if (task.parentStoryId) {
+    patchDoc.push({
       op: 'add',
       path: '/relations/-',
       value: {
         rel: 'System.LinkTypes.Hierarchy-Reverse',
-        url: `https://dev.azure.com/${opts.org}/_apis/wit/workItems/${task.parentStoryId}`,
+        url: `https://dev.azure.com/${seg(opts.org)}/_apis/wit/workItems/${task.parentStoryId}`,
       },
-    },
-  ];
+    });
+  }
 
   // Only set Description when present. A JSON-patch "add" with an undefined
   // value serializes without the `value` key, which Azure rejects as
@@ -414,7 +427,7 @@ export async function createTask(
   }
 
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Task?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems/$Task?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'POST',
@@ -434,11 +447,13 @@ export async function createTask(
   // logged loudly rather than reported as a hard error.
   if (task.state) {
     let transitioned = false;
+    let transitionError: string | undefined;
     for (let attempt = 1; attempt <= 3 && !transitioned; attempt++) {
       try {
         await setTaskState(opts, data.id, task.state);
         transitioned = true;
       } catch (err) {
+        transitionError = err instanceof Error ? err.message : String(err);
         if (attempt === 3) {
           console.error(
             `Task ${data.id} created but transition to state '${task.state}' failed after ${attempt} attempts:`,
@@ -447,11 +462,20 @@ export async function createTask(
         }
       }
     }
+    if (!transitioned) {
+      return {
+        id: data.id,
+        url: data._links?.html?.href || `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_workitems/edit/${data.id}`,
+        stateTransitioned: false,
+        transitionError,
+      };
+    }
   }
 
   return {
     id: data.id,
-    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+    url: data._links?.html?.href || `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_workitems/edit/${data.id}`,
+    stateTransitioned: true,
   };
 }
 
@@ -468,7 +492,7 @@ export async function queryEpics(
   };
 
   const wiqlResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
@@ -484,7 +508,7 @@ export async function queryEpics(
   const idsParam = ids.join(',');
 
   const detailResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const detailData = (await detailResponse.json()) as {
@@ -515,7 +539,7 @@ export async function queryStoriesByEpic(
   };
 
   const wiqlResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
@@ -529,7 +553,7 @@ export async function queryStoriesByEpic(
   const idsParam = ids.join(',');
 
   const detailResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const detailData = (await detailResponse.json()) as {
@@ -574,7 +598,7 @@ export async function getExistingWorkItems(
   for (let i = 0; i < ids.length; i += 200) {
     const idsParam = ids.slice(i, i + 200).join(',');
     const response = await azureFetch(
-      `https://dev.azure.com/${opts.org}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.State&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
+      `https://dev.azure.com/${seg(opts.org)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.State&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
       opts.accessToken
     );
     const data = (await response.json()) as {
@@ -592,7 +616,7 @@ export async function getWorkItemDetails(
   opts: AzureApiOptions & { workItemId: number }
 ): Promise<AzureWorkItemDetails> {
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/_apis/wit/workitems/${opts.workItemId}?$expand=relations&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/_apis/wit/workitems/${opts.workItemId}?$expand=relations&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const data = (await response.json()) as {
@@ -644,7 +668,7 @@ export async function createUserStory(
       path: '/relations/-',
       value: {
         rel: 'System.LinkTypes.Hierarchy-Reverse',
-        url: `https://dev.azure.com/${opts.org}/_apis/wit/workItems/${story.parentEpicId}`,
+        url: `https://dev.azure.com/${seg(opts.org)}/_apis/wit/workItems/${story.parentEpicId}`,
       },
     },
   ];
@@ -668,7 +692,7 @@ export async function createUserStory(
   }
 
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$${encodeURIComponent(typeName)}?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems/$${encodeURIComponent(typeName)}?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'POST',
@@ -682,7 +706,7 @@ export async function createUserStory(
   };
   return {
     id: data.id,
-    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+    url: data._links?.html?.href || `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_workitems/edit/${data.id}`,
   };
 }
 
@@ -700,7 +724,7 @@ export async function getWorkItemTypes(
   opts: AzureApiOptions & { projectId: string }
 ): Promise<WorkItemTypeInfo[]> {
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitemtypes?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitemtypes?api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const data = (await response.json()) as {
@@ -746,7 +770,7 @@ export async function queryFeatures(
   };
 
   const wiqlResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
@@ -762,7 +786,7 @@ export async function queryFeatures(
   const idsParam = ids.join(',');
 
   const detailResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const detailData = (await detailResponse.json()) as {
@@ -792,7 +816,7 @@ export async function queryFeaturesByEpic(
   };
 
   const wiqlResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
@@ -806,7 +830,7 @@ export async function queryFeaturesByEpic(
   const idsParam = ids.join(',');
 
   const detailResponse = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
     opts.accessToken
   );
   const detailData = (await detailResponse.json()) as {
@@ -841,7 +865,7 @@ export async function createEpic(
   }
 
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Epic?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems/$Epic?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'POST',
@@ -855,7 +879,7 @@ export async function createEpic(
   };
   return {
     id: data.id,
-    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+    url: data._links?.html?.href || `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_workitems/edit/${data.id}`,
   };
 }
 
@@ -876,7 +900,7 @@ export async function createFeature(
       path: '/relations/-',
       value: {
         rel: 'System.LinkTypes.Hierarchy-Reverse',
-        url: `https://dev.azure.com/${opts.org}/_apis/wit/workItems/${feature.parentEpicId}`,
+        url: `https://dev.azure.com/${seg(opts.org)}/_apis/wit/workItems/${feature.parentEpicId}`,
       },
     });
   }
@@ -891,7 +915,7 @@ export async function createFeature(
   }
 
   const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/${opts.projectId}/_apis/wit/workitems/$Feature?api-version=${AZURE_API_VERSION}`,
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems/$Feature?api-version=${AZURE_API_VERSION}`,
     opts.accessToken,
     {
       method: 'POST',
@@ -905,6 +929,6 @@ export async function createFeature(
   };
   return {
     id: data.id,
-    url: data._links?.html?.href || `https://dev.azure.com/${opts.org}/${opts.projectId}/_workitems/edit/${data.id}`,
+    url: data._links?.html?.href || `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_workitems/edit/${data.id}`,
   };
 }
