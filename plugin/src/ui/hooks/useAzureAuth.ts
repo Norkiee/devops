@@ -13,10 +13,11 @@ interface UseAzureAuthResult {
   clearAuthError: () => void;
 }
 
+// 128-bit cryptographically-random hex id, used as the single-use OAuth state.
 function generateId(): string {
-  return 'xxxxxxxxxxxx'.replace(/x/g, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  );
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export function useAzureAuth(): UseAzureAuthResult {
@@ -34,21 +35,26 @@ export function useAzureAuth(): UseAzureAuthResult {
     // Initialize storage to ensure it's loaded
     initStorage();
 
-    // Check immediately in case storage is already loaded
-    const stored = getStorage();
-    if (stored.accessToken && stored.sessionId && !hasRestoredFromStorage.current) {
+    // Restore the session id only — access tokens are NOT persisted. Fetch a
+    // fresh one into memory via refresh; if the session is dead, clear it.
+    const restore = (sid: string): void => {
+      if (hasRestoredFromStorage.current) return;
       hasRestoredFromStorage.current = true;
-      setAccessToken(stored.accessToken);
-      setSessionId(stored.sessionId);
-    }
+      setSessionId(sid);
+      refreshToken(sid)
+        .then((tok) => setAccessToken(tok))
+        .catch(() => {
+          setSessionId(null);
+          setStorage({ sessionId: undefined, accessToken: undefined });
+        });
+    };
+
+    const stored = getStorage();
+    if (stored.sessionId) restore(stored.sessionId);
 
     // Subscribe to storage changes for async load
     const unsubscribe = onStorageChange((data) => {
-      if (data.accessToken && data.sessionId && !hasRestoredFromStorage.current) {
-        hasRestoredFromStorage.current = true;
-        setAccessToken(data.accessToken);
-        setSessionId(data.sessionId);
-      }
+      if (data.sessionId) restore(data.sessionId);
     });
 
     return unsubscribe;
@@ -104,10 +110,8 @@ export function useAzureAuth(): UseAzureAuthResult {
           }
           setAccessToken(result.accessToken);
           setSessionId(result.sessionId);
-          setStorage({
-            accessToken: result.accessToken,
-            sessionId: result.sessionId,
-          });
+          // Persist only the session id; the access token stays in memory.
+          setStorage({ sessionId: result.sessionId, accessToken: undefined });
           // Call completion callback after a short delay to ensure state has propagated
           if (onComplete) {
             setTimeout(onComplete, 100);
@@ -127,7 +131,6 @@ export function useAzureAuth(): UseAzureAuthResult {
     try {
       const newToken = await refreshToken(sessionId);
       setAccessToken(newToken);
-      setStorage({ accessToken: newToken });
     } catch {
       setAccessToken(null);
       setSessionId(null);

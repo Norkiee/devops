@@ -427,17 +427,25 @@ export async function createTask(
     _links?: { html?: { href?: string } };
   };
 
-  // Transition to the requested state with a follow-up PATCH. Best-effort: a
-  // task created in its default state is still a success, so a failed
-  // transition is logged rather than failing the whole create.
+  // Transition to the requested state with a follow-up PATCH, retried a few
+  // times since it's usually a transient failure. Kept best-effort on final
+  // failure: the task IS created, and failing the call would make a retry
+  // create a duplicate. The shortfall (task left in its default state) is
+  // logged loudly rather than reported as a hard error.
   if (task.state) {
-    try {
-      await setTaskState(opts, data.id, task.state);
-    } catch (err) {
-      console.error(
-        `Task ${data.id} created but transition to state '${task.state}' failed:`,
-        err
-      );
+    let transitioned = false;
+    for (let attempt = 1; attempt <= 3 && !transitioned; attempt++) {
+      try {
+        await setTaskState(opts, data.id, task.state);
+        transitioned = true;
+      } catch (err) {
+        if (attempt === 3) {
+          console.error(
+            `Task ${data.id} created but transition to state '${task.state}' failed after ${attempt} attempts:`,
+            err
+          );
+        }
+      }
     }
   }
 
@@ -558,19 +566,26 @@ export async function getExistingWorkItems(
       .filter((s) => s.category === 'Completed' || s.category === 'Removed')
       .map((s) => s.name)
   );
-  // The batch endpoint accepts up to 200 ids per call.
-  const idsParam = ids.slice(0, 200).join(',');
-  const response = await azureFetch(
-    `https://dev.azure.com/${opts.org}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.State&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const data = (await response.json()) as {
-    value?: Array<{ id: number; fields: Record<string, string> }>;
-  };
-  return (data.value || []).map((wi) => {
-    const state = wi.fields['System.State'];
-    return { id: wi.id, state, closed: closedNames.has(state) };
-  });
+
+  // The batch endpoint accepts up to 200 ids per call — chunk so large
+  // tasklists are fully verified. (Truncating would make the plugin treat the
+  // dropped ids as deleted and re-create duplicates.)
+  const results: ExistingWorkItem[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const idsParam = ids.slice(i, i + 200).join(',');
+    const response = await azureFetch(
+      `https://dev.azure.com/${opts.org}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.State&errorPolicy=omit&api-version=${AZURE_API_VERSION}`,
+      opts.accessToken
+    );
+    const data = (await response.json()) as {
+      value?: Array<{ id: number; fields: Record<string, string> }>;
+    };
+    for (const wi of data.value || []) {
+      const state = wi.fields['System.State'];
+      results.push({ id: wi.id, state, closed: closedNames.has(state) });
+    }
+  }
+  return results;
 }
 
 export async function getWorkItemDetails(
