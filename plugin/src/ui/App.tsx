@@ -1,27 +1,19 @@
 import React, { useState, useCallback } from 'react';
 import {
   Screen,
-  FrameData,
   FrameWorkItems,
   WorkItem,
   WorkItemType,
   WorkItemTypeInfo,
   HierarchyContext,
   TaskToSubmit,
-  UserStoryToSubmit,
-  EpicToSubmit,
-  FeatureToSubmit,
   CreateTaskResult,
-  CreateUserStoryResult,
-  CreateEpicResult,
-  CreateFeatureResult,
-  isStoryLikeType,
 } from './types';
 import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { createTasks, createUserStories, createEpics, createFeatures, fetchExistingWorkItems, closeTasks } from './services/api';
+import { createTasks, fetchExistingWorkItems, closeTasks } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -31,8 +23,8 @@ import { SubmittingScreen } from './screens/SubmittingScreen';
 import { SuccessScreen } from './screens/SuccessScreen';
 import { PartialFailureScreen } from './screens/PartialFailureScreen';
 
-// Union type for results (all work item types)
-type SubmitResult = CreateTaskResult | CreateUserStoryResult | CreateEpicResult | CreateFeatureResult;
+// This tool only creates/closes Tasks.
+type SubmitResult = CreateTaskResult;
 
 // Which Review section a task belongs to. New (create) and Open (close) are
 // mutually exclusive — an action targets one section at a time; Closed is
@@ -341,88 +333,22 @@ export function App(): React.ReactElement {
     setSubmittedIds(new Set());
 
     try {
-      let submitResults: SubmitResult[];
-
-      switch (workItemType) {
-        case 'Epic': {
-          // Create epics
-          const epics: EpicToSubmit[] = selectedItems.map((item) => ({
-            workItemId: item.id,
-            title: item.title,
-            description: item.description,
-            tags: selectedTags,
-          }));
-          submitResults = await createEpics(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            epics
-          );
-          break;
-        }
-        case 'Feature': {
-          // Create features
-          const features: FeatureToSubmit[] = selectedItems.map((item) => ({
-            workItemId: item.id,
-            title: item.title,
-            description: item.description,
-            parentEpicId: hierarchyContext.epic?.id,
-            tags: selectedTags,
-          }));
-          submitResults = await createFeatures(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            features
-          );
-          break;
-        }
-        case 'UserStory': {
-          // Create user stories - parent can be epic or feature
-          const parentId = hierarchyContext.feature?.id || hierarchyContext.epic?.id;
-          if (!parentId) {
-            throw new Error('No parent selected for user stories');
-          }
-          const stories: UserStoryToSubmit[] = selectedItems.map((item) => ({
-            workItemId: item.id,
-            title: item.title,
-            description: item.description,
-            tags: selectedTags,
-            parentEpicId: parentId,
-          }));
-          // Find the correct work item type name (User Story, Product Backlog Item, etc.)
-          const storyTypeName = availableTypes.find((t) => isStoryLikeType(t.name))?.name;
-          submitResults = await createUserStories(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            stories,
-            storyTypeName
-          );
-          break;
-        }
-        case 'Task':
-        default: {
-          // Create tasks
-          if (!hierarchyContext.userStory?.id) {
-            throw new Error('No user story selected for tasks');
-          }
-          const tasks: TaskToSubmit[] = selectedItems.map((item) => ({
-            taskId: item.id,
-            title: item.title,
-            description: item.description,
-            tags: selectedTags,
-            parentStoryId: hierarchyContext.userStory!.id,
-          }));
-          submitResults = await createTasks(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            tasks
-          );
-          break;
-        }
+      if (!hierarchyContext.userStory?.id) {
+        throw new Error('No user story selected for tasks');
       }
+      const tasks: TaskToSubmit[] = selectedItems.map((item) => ({
+        taskId: item.id,
+        title: item.title,
+        description: item.description,
+        tags: selectedTags,
+        parentStoryId: hierarchyContext.userStory!.id,
+      }));
+      const submitResults = await createTasks(
+        auth.accessToken!,
+        azureOrg,
+        azureProjectId,
+        tasks
+      );
 
       setResults(submitResults);
       stampDedup(submitResults);
@@ -493,9 +419,9 @@ export function App(): React.ReactElement {
 
   const handleRetry = useCallback(async () => {
     const selectedItems = getSelectedWorkItems();
-    const failedIds = results.filter((r) => !r.success).map((r) =>
-      'workItemId' in r ? r.workItemId : ('taskId' in r ? r.taskId : '')
-    );
+    const failedIds = results
+      .filter((r) => !r.success)
+      .map((r) => ('taskId' in r ? r.taskId : ''));
     const failedItems = selectedItems.filter((item) => failedIds.includes(item.id));
 
     if (failedItems.length === 0) return;
@@ -504,86 +430,25 @@ export function App(): React.ReactElement {
     setSubmittedIds(new Set());
 
     try {
-      let retryResults: SubmitResult[];
+      const tasks: TaskToSubmit[] = failedItems.map((item) => ({
+        taskId: item.id,
+        title: item.title,
+        description: item.description,
+        tags: selectedTags,
+        parentStoryId: hierarchyContext.userStory!.id,
+      }));
+      const retryResults = await createTasks(
+        auth.accessToken!,
+        azureOrg,
+        azureProjectId,
+        tasks
+      );
 
-      switch (workItemType) {
-        case 'Epic': {
-          const epics: EpicToSubmit[] = failedItems.map((item) => ({
-            workItemId: item.id,
-            title: item.title,
-            description: item.description,
-            tags: selectedTags,
-          }));
-          retryResults = await createEpics(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            epics
-          );
-          break;
-        }
-        case 'Feature': {
-          const features: FeatureToSubmit[] = failedItems.map((item) => ({
-            workItemId: item.id,
-            title: item.title,
-            description: item.description,
-            parentEpicId: hierarchyContext.epic?.id,
-            tags: selectedTags,
-          }));
-          retryResults = await createFeatures(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            features
-          );
-          break;
-        }
-        case 'UserStory': {
-          const parentId = hierarchyContext.feature?.id || hierarchyContext.epic?.id;
-          const stories: UserStoryToSubmit[] = failedItems.map((item) => ({
-            workItemId: item.id,
-            title: item.title,
-            description: item.description,
-            tags: selectedTags,
-            parentEpicId: parentId!,
-          }));
-          // Find the correct work item type name
-          const storyTypeName = availableTypes.find((t) => isStoryLikeType(t.name))?.name;
-          retryResults = await createUserStories(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            stories,
-            storyTypeName
-          );
-          break;
-        }
-        case 'Task':
-        default: {
-          const tasks: TaskToSubmit[] = failedItems.map((item) => ({
-            taskId: item.id,
-            title: item.title,
-            description: item.description,
-            tags: selectedTags,
-            parentStoryId: hierarchyContext.userStory!.id,
-          }));
-          retryResults = await createTasks(
-            auth.accessToken!,
-            azureOrg,
-            azureProjectId,
-            tasks
-          );
-          break;
-        }
-      }
-
-      // Merge results
+      // Merge retried results back over the originals by taskId.
       const updatedResults = results.map((r) => {
-        const id = 'workItemId' in r ? r.workItemId : ('taskId' in r ? r.taskId : '');
-        const retryResult = retryResults.find((rr) =>
-          ('workItemId' in rr ? rr.workItemId : ('taskId' in rr ? rr.taskId : '')) === id
-        );
-        return retryResult || r;
+        const id = 'taskId' in r ? r.taskId : '';
+        const retried = retryResults.find((rr) => ('taskId' in rr ? rr.taskId : '') === id);
+        return retried || r;
       });
       setResults(updatedResults);
       stampDedup(retryResults);
@@ -615,14 +480,8 @@ export function App(): React.ReactElement {
   ]);
 
   const handleViewInAzure = useCallback(() => {
-    const firstSuccess = results.find((r) => r.success);
-    if (firstSuccess) {
-      // Handle both CreateUserStoryResult (url) and CreateTaskResult (taskUrl)
-      const url = 'url' in firstSuccess ? firstSuccess.url : ('taskUrl' in firstSuccess ? firstSuccess.taskUrl : undefined);
-      if (url) {
-        window.open(url, '_blank');
-      }
-    }
+    const url = results.find((r) => r.success)?.taskUrl;
+    if (url) window.open(url, '_blank');
   }, [results]);
 
   const handleGoHome = useCallback(() => {

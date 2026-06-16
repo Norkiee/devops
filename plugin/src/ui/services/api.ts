@@ -3,13 +3,7 @@ import {
   AzureStory,
   AzureWorkItemDetails,
   CreateTaskResult,
-  CreateUserStoryResult,
-  CreateEpicResult,
-  CreateFeatureResult,
   TaskToSubmit,
-  UserStoryToSubmit,
-  EpicToSubmit,
-  FeatureToSubmit,
   WorkItemTypeInfo,
 } from '../types';
 
@@ -264,34 +258,6 @@ export async function createTasks(
   return data.results;
 }
 
-export async function createUserStories(
-  accessToken: string,
-  org: string,
-  projectId: string,
-  stories: UserStoryToSubmit[],
-  workItemTypeName?: string
-): Promise<CreateUserStoryResult[]> {
-  const data = await request<{ results: CreateUserStoryResult[] }>(
-    `/api/azure/stories?org=${encodeURIComponent(org)}`,
-    {
-      method: 'POST',
-      headers: authHeaders(accessToken),
-      body: JSON.stringify({
-        projectId,
-        workItemTypeName,
-        stories: stories.map((s) => ({
-          workItemId: s.workItemId,
-          title: s.title,
-          description: s.description,
-          parentEpicId: s.parentEpicId,
-          tags: s.tags,
-        })),
-      }),
-    }
-  );
-  return data.results;
-}
-
 export async function fetchWorkItemTypes(
   accessToken: string,
   org: string,
@@ -329,53 +295,3 @@ export async function fetchFeaturesByEpic(
   return data.features;
 }
 
-export async function createEpics(
-  accessToken: string,
-  org: string,
-  projectId: string,
-  epics: EpicToSubmit[]
-): Promise<CreateEpicResult[]> {
-  const data = await request<{ results: CreateEpicResult[] }>(
-    `/api/azure/epics?org=${encodeURIComponent(org)}`,
-    {
-      method: 'POST',
-      headers: authHeaders(accessToken),
-      body: JSON.stringify({
-        projectId,
-        epics: epics.map((e) => ({
-          workItemId: e.workItemId,
-          title: e.title,
-          description: e.description,
-          tags: e.tags,
-        })),
-      }),
-    }
-  );
-  return data.results;
-}
-
-export async function createFeatures(
-  accessToken: string,
-  org: string,
-  projectId: string,
-  features: FeatureToSubmit[]
-): Promise<CreateFeatureResult[]> {
-  const data = await request<{ results: CreateFeatureResult[] }>(
-    `/api/azure/features?org=${encodeURIComponent(org)}`,
-    {
-      method: 'POST',
-      headers: authHeaders(accessToken),
-      body: JSON.stringify({
-        projectId,
-        features: features.map((f) => ({
-          workItemId: f.workItemId,
-          title: f.title,
-          description: f.description,
-          parentEpicId: f.parentEpicId,
-          tags: f.tags,
-        })),
-      }),
-    }
-  );
-  return data.results;
-}
