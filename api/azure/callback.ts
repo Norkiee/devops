@@ -127,7 +127,7 @@ export default async function handler(
       }
       body {
         font-family: 'General Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        background: linear-gradient(135deg, #E6FAF7 0%, #CDEEEA 100%);
         min-height: 100vh;
         display: flex;
         align-items: center;
@@ -139,14 +139,14 @@ export default async function handler(
         border-radius: 24px;
         padding: 48px;
         text-align: center;
-        box-shadow: 0 4px 24px rgba(124, 58, 237, 0.1);
+        box-shadow: 0 4px 24px rgba(1, 120, 106, 0.12);
         max-width: 400px;
         width: 100%;
       }
       .checkmark-circle {
         width: 80px;
         height: 80px;
-        background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+        background: linear-gradient(135deg, #01786A 0%, #01C7B1 100%);
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -188,8 +188,8 @@ export default async function handler(
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        background: #f3e8ff;
-        color: #7c3aed;
+        background: #E6FAF7;
+        color: #01786A;
         padding: 10px 20px;
         border-radius: 9999px;
         font-size: 14px;
