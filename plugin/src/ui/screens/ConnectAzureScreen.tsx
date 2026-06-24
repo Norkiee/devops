@@ -201,7 +201,7 @@ export function ConnectAzureScreen({
         Enter your project URL and a personal access token.
       </p>
 
-      <div style={{ width: '100%', maxWidth: '460px', textAlign: 'left' }}>
+      <div style={{ width: '100%', textAlign: 'left' }}>
         <label style={styles.label}>Project URL</label>
         <input
           style={styles.input}
@@ -233,7 +233,7 @@ export function ConnectAzureScreen({
 
       {error && <div className="error-message">{error}</div>}
 
-      <div className="screen-footer" style={{ marginTop: '16px' }}>
+      <div className="screen-footer" style={{ marginTop: '16px', width: '100%' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
           <Button onClick={handleSubmit} fullWidth disabled={!url.trim() || !pat.trim() || validating}>
             {validating ? 'Verifying…' : 'Connect'}
