@@ -94,7 +94,7 @@ export default async function handler(
 
     try {
       // Get current user to auto-assign features
-      const currentUser = await getCurrentUser(auth.accessToken);
+      const currentUser = await getCurrentUser(auth.accessToken, auth.org);
 
       const results: CreateFeatureResult[] = await mapWithConcurrency(
         features,

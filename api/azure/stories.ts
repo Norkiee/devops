@@ -78,7 +78,7 @@ export default async function handler(
     // Get current user to auto-assign stories
     let currentUserEmail: string | undefined;
     try {
-      const currentUser = await getCurrentUser(auth.accessToken);
+      const currentUser = await getCurrentUser(auth.accessToken, auth.org);
       currentUserEmail = currentUser.emailAddress;
     } catch {
       // Continue without auto-assignment if we can't get current user

@@ -72,7 +72,7 @@ export default async function handler(
 
     try {
       // Get current user to auto-assign epics
-      const currentUser = await getCurrentUser(auth.accessToken);
+      const currentUser = await getCurrentUser(auth.accessToken, auth.org);
 
       const results: CreateEpicResult[] = await mapWithConcurrency(
         epics,

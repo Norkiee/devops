@@ -94,7 +94,15 @@ export default async function handler(
     // ── Create new tasks ────────────────────────────────────────────
     let results: CreateTaskResult[] | undefined;
     if (hasTasks) {
-      const currentUser = await getCurrentUser(auth.accessToken);
+      // Resolve the assignee, but never let it block the push — if the lookup
+      // fails, create the tasks unassigned rather than failing the whole batch.
+      let currentUserEmail: string | undefined;
+      try {
+        const currentUser = await getCurrentUser(auth.accessToken, auth.org);
+        currentUserEmail = currentUser.emailAddress || undefined;
+      } catch (e) {
+        console.error('Could not resolve current user; creating tasks unassigned:', e);
+      }
       const inProgressState = await getTaskInProgressState({
         org: auth.org,
         accessToken: auth.accessToken,
@@ -115,7 +123,7 @@ export default async function handler(
               parentStoryId: task.parentStoryId,
               tags: task.tags,
               state: inProgressState,
-              assignedTo: currentUser.emailAddress,
+              assignedTo: currentUserEmail,
             }
           );
           return {

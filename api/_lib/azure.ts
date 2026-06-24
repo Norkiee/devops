@@ -195,40 +195,34 @@ export interface UserProfile {
   emailAddress: string;
 }
 
+// Resolve the authenticated user from the ORG-scoped connectionData endpoint.
+// We deliberately avoid the global app.vssps.visualstudio.com profile service:
+// an org-scoped PAT authenticates fine against dev.azure.com/{org} (so reads
+// work) but is frequently rejected by the global service, which made task
+// creation fail with a false "token rejected".
 export async function getCurrentUser(
-  accessToken: string
+  accessToken: string,
+  org: string
 ): Promise<UserProfile> {
-  const profileResponse = await azureFetch(
-    'https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1',
+  const response = await azureFetch(
+    `https://dev.azure.com/${seg(org)}/_apis/connectionData`,
     accessToken
   );
-  const profile = (await profileResponse.json()) as {
-    id: string;
-    displayName: string;
-    emailAddress: string;
+  const data = (await response.json()) as {
+    authenticatedUser?: {
+      id?: string;
+      providerDisplayName?: string;
+      properties?: { Account?: { $value?: string } };
+    };
   };
+  const user = data.authenticatedUser;
+  const email = user?.properties?.Account?.$value || '';
   return {
-    id: profile.id,
-    displayName: profile.displayName,
-    emailAddress: profile.emailAddress,
+    id: user?.id || '',
+    displayName: user?.providerDisplayName || '',
+    // AssignedTo resolves by UPN/email; fall back to the display name.
+    emailAddress: email || user?.providerDisplayName || '',
   };
-}
-
-export async function listOrganizations(
-  accessToken: string
-): Promise<string[]> {
-  // First get the user's profile to get their member ID
-  const profile = await getCurrentUser(accessToken);
-
-  // Then get their organizations using the member ID
-  const accountsResponse = await azureFetch(
-    `https://app.vssps.visualstudio.com/_apis/accounts?memberId=${profile.id}&api-version=7.1`,
-    accessToken
-  );
-  const accounts = (await accountsResponse.json()) as {
-    value: Array<{ accountName: string }>;
-  };
-  return accounts.value.map((a) => a.accountName);
 }
 
 export async function listProjects(
