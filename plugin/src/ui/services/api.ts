@@ -62,51 +62,6 @@ function authHeaders(accessToken: string): Record<string, string> {
   return { Authorization: `Bearer ${accessToken}` };
 }
 
-export function getAuthUrl(state: string): string {
-  return `${API_URL}/api/azure/auth?state=${encodeURIComponent(state)}`;
-}
-
-export async function pollAuthResult(
-  state: string
-): Promise<{ sessionId: string; accessToken: string } | null> {
-  const data = await request<{
-    status: string;
-    sessionId?: string;
-    accessToken?: string;
-  }>(`/api/azure/poll?state=${encodeURIComponent(state)}`);
-
-  if (data.status === 'complete' && data.sessionId && data.accessToken) {
-    return { sessionId: data.sessionId, accessToken: data.accessToken };
-  }
-  return null;
-}
-
-export async function refreshToken(
-  sessionId: string
-): Promise<string> {
-  const data = await request<{ accessToken: string }>(
-    '/api/azure/refresh',
-    {
-      method: 'POST',
-      body: JSON.stringify({ sessionId }),
-    }
-  );
-  return data.accessToken;
-}
-
-// Revokes the server-side refresh token for this session. Best-effort: never
-// throws, so signing out can't be blocked by a backend hiccup.
-export async function logoutSession(sessionId: string): Promise<void> {
-  try {
-    await request('/api/azure/refresh?action=logout', {
-      method: 'POST',
-      body: JSON.stringify({ sessionId }),
-    });
-  } catch {
-    // Intentionally swallowed — local sign-out proceeds regardless.
-  }
-}
-
 export async function fetchOrgs(
   accessToken: string
 ): Promise<string[]> {

@@ -4,7 +4,6 @@ import { Button } from '../components/Button';
 import { Select } from '../components/Select';
 import { Tag } from '../components/Tag';
 import {
-  fetchOrgs,
   fetchProjects,
   fetchWorkItemTypes,
   fetchEpics,
@@ -13,12 +12,14 @@ import {
   fetchStoriesByEpic,
   fetchWorkItemDetails,
   fetchTags,
-  AuthError,
 } from '../services/api';
 
 interface SelectProjectScreenProps {
   accessToken: string;
   workItemType: WorkItemType;
+  // Org parsed from the project URL at connect time. Used directly instead of
+  // listing orgs via the accounts API (which an org-scoped PAT may not allow).
+  connectedOrg: string;
   savedOrg?: string;
   savedProjectId?: string;
   savedEpicId?: number;
@@ -34,14 +35,13 @@ interface SelectProjectScreenProps {
     parentTitle: string;
   }) => void;
   onSessionExpired: () => void;
-  // Resolves to the refreshed access token; callers may ignore the value.
-  onRefreshToken: () => Promise<string>;
   onBack: () => void;
 }
 
 export function SelectProjectScreen({
   accessToken,
   workItemType,
+  connectedOrg,
   savedOrg,
   savedProjectId,
   savedEpicId,
@@ -50,12 +50,12 @@ export function SelectProjectScreen({
   savedFrequentTags,
   onContinue,
   onSessionExpired,
-  onRefreshToken,
   onBack,
 }: SelectProjectScreenProps): React.ReactElement {
-  // Organization and project state
-  const [orgs, setOrgs] = useState<string[]>([]);
-  const [org, setOrg] = useState(savedOrg || '');
+  // Organization and project state. The org is fixed to the one from the
+  // connect URL (no org dropdown / accounts API).
+  const [orgs, setOrgs] = useState<string[]>(connectedOrg ? [connectedOrg] : []);
+  const [org, setOrg] = useState(connectedOrg || savedOrg || '');
   const [projects, setProjects] = useState<AzureProject[]>([]);
   const [projectId, setProjectId] = useState(savedProjectId || '');
   const [availableTypes, setAvailableTypes] = useState<WorkItemTypeInfo[]>([]);
@@ -77,27 +77,17 @@ export function SelectProjectScreen({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Determine what work item types are available
   const hasEpics = useMemo(() => availableTypes.some((t) => t.name === 'Epic'), [availableTypes]);
   const hasFeatures = useMemo(() => availableTypes.some((t) => t.name === 'Feature'), [availableTypes]);
   const hasUserStories = useMemo(() => availableTypes.some((t) => isStoryLikeType(t.name)), [availableTypes]);
 
-  // Helper to handle auth errors with refresh attempt
-  // Returns true if refresh succeeded and caller should retry
+  // A PAT can't be refreshed, so any auth failure means the token is bad —
+  // bounce the user back to reconnect. Returns false (never "retry").
   const handleAuthError = async (): Promise<boolean> => {
-    if (isRefreshing) return false;
-    setIsRefreshing(true);
-    try {
-      await onRefreshToken();
-      setIsRefreshing(false);
-      return true;
-    } catch {
-      setIsRefreshing(false);
-      onSessionExpired();
-      return false;
-    }
+    onSessionExpired();
+    return false;
   };
 
   // Check if an error message indicates auth failure
@@ -114,42 +104,12 @@ export function SelectProjectScreen({
     );
   };
 
-  // Auto-fetch organizations on mount
+  // The org comes from the connect URL — no listing call. Just pin it.
   useEffect(() => {
-    let isCancelled = false;
-
-    const loadOrgs = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const fetchedOrgs = await fetchOrgs(accessToken);
-        if (isCancelled) return;
-        setOrgs(fetchedOrgs);
-        if (savedOrg && fetchedOrgs.includes(savedOrg)) {
-          setOrg(savedOrg);
-        } else if (fetchedOrgs.length === 1) {
-          setOrg(fetchedOrgs[0]);
-        }
-      } catch (err) {
-        if (isCancelled) return;
-        // Try to refresh token on any error - expired tokens may not always return proper auth errors
-        if (isLikelyAuthError(err)) {
-          await handleAuthError();
-        } else {
-          // For other errors, still try refresh once as fallback
-          const refreshed = await handleAuthError();
-          if (!refreshed) {
-            // If refresh failed, session is expired - onSessionExpired already called
-          }
-        }
-      } finally {
-        if (!isCancelled) setLoading(false);
-      }
-    };
-
-    loadOrgs();
-    return () => { isCancelled = true; };
-  }, [accessToken, savedOrg]);
+    if (!connectedOrg) return;
+    setOrgs([connectedOrg]);
+    setOrg(connectedOrg);
+  }, [connectedOrg]);
 
   // Fetch projects when org changes
   useEffect(() => {

@@ -180,10 +180,10 @@ export interface PluginStorage {
   lastFeatureId?: number;
   lastWorkItemType?: WorkItemType;
   frequentTags?: string[];
-  sessionId?: string;
-  // Note: accessToken is stored for session persistence across plugin restarts.
-  // For higher security, consider storing only sessionId and refreshing tokens on each session.
-  accessToken?: string;
+  // The Azure DevOps org/project URL the user connected with. Non-secret, so it
+  // is persisted to pre-fill the connect form on the next session. The PAT
+  // itself is deliberately NOT persisted — it lives in memory only.
+  azureUrl?: string;
 }
 
 export type Screen =

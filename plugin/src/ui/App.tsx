@@ -13,7 +13,7 @@ import { useFrameSelection } from './hooks/useFrameSelection';
 import { useAzureAuth } from './hooks/useAzureAuth';
 import { usePluginStorage } from './hooks/usePluginStorage';
 import { useAutoResize } from './hooks/useAutoResize';
-import { createTasks, fetchExistingWorkItems, closeTasks, AuthError } from './services/api';
+import { createTasks, fetchExistingWorkItems, closeTasks } from './services/api';
 import { HomeScreen } from './screens/HomeScreen';
 import { ConnectAzureScreen } from './screens/ConnectAzureScreen';
 import { SelectProjectScreen } from './screens/SelectProjectScreen';
@@ -74,11 +74,18 @@ export function App(): React.ReactElement {
     setScreen(auth.isAuthenticated ? 'select-project' : 'connect-azure');
   }, [requestFrames, auth.isAuthenticated]);
 
-  const handleConnectAzure = useCallback(() => {
-    auth.startAuth(() => {
+  const handleConnectAzure = useCallback(
+    ({ pat, org, projectId, url }: { pat: string; org: string; projectId?: string; url: string }) => {
+      auth.connect(pat);
+      setAzureOrg(org);
+      setAzureProjectId(projectId || '');
+      // Persist only the non-secret URL/org/project for next session; never the PAT.
+      updateStorage({ azureOrg: org, azureProjectId: projectId, azureUrl: url });
+      setError(null);
       setScreen('select-project');
-    });
-  }, [auth]);
+    },
+    [auth, updateStorage]
+  );
 
   // Called after selecting org/project and parent (combined screen)
   const handleProjectSelected = useCallback(
@@ -113,34 +120,13 @@ export function App(): React.ReactElement {
     [updateStorage]
   );
 
+  // A PAT can't be refreshed — if Azure rejects it, clear it and send the user
+  // back to paste a valid one.
   const handleSessionExpired = useCallback(() => {
     auth.logout();
+    setError('Your token was rejected. Please reconnect with a valid Azure DevOps personal access token.');
     setScreen('connect-azure');
   }, [auth]);
-
-  // Run an authenticated API call, transparently refreshing the access token
-  // once on a 401 and retrying with the fresh token. If the refresh itself
-  // fails, surface an AuthError so the caller routes to the reconnect screen
-  // instead of dropping the user's work on a recoverable expiry.
-  const runWithAuth = useCallback(
-    async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
-      try {
-        return await fn(auth.accessToken!);
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AuthError') {
-          let token: string;
-          try {
-            token = await auth.refresh();
-          } catch {
-            throw new AuthError();
-          }
-          return await fn(token);
-        }
-        throw err;
-      }
-    },
-    [auth]
-  );
 
   // Explicit sign-out: clears the local token/session and resets the selected
   // Azure org/project so a different account starts clean. The next connect
@@ -365,8 +351,11 @@ export function App(): React.ReactElement {
         tags: selectedTags,
         parentStoryId: hierarchyContext.userStory?.id,
       }));
-      const submitResults = await runWithAuth((token) =>
-        createTasks(token, azureOrg, azureProjectId, tasks)
+      const submitResults = await createTasks(
+        auth.accessToken!,
+        azureOrg,
+        azureProjectId,
+        tasks
       );
 
       setResults(submitResults);
@@ -394,7 +383,6 @@ export function App(): React.ReactElement {
     azureProjectId,
     handleSessionExpired,
     stampDedup,
-    runWithAuth,
   ]);
 
   // Close the selected existing-and-open tasks: transition them to the
@@ -411,8 +399,11 @@ export function App(): React.ReactElement {
     setSubmittedIds(new Set());
 
     try {
-      const closeResults = await runWithAuth((token) =>
-        closeTasks(token, azureOrg, azureProjectId, closeable.map((i) => i.azureId as number))
+      const closeResults = await closeTasks(
+        auth.accessToken!,
+        azureOrg,
+        azureProjectId,
+        closeable.map((i) => i.azureId as number)
       );
       setResults(closeResults);
       setSubmittedIds(new Set(closeable.map((i) => i.id)));
@@ -432,7 +423,6 @@ export function App(): React.ReactElement {
     azureOrg,
     azureProjectId,
     handleSessionExpired,
-    runWithAuth,
   ]);
 
   const handleRetry = useCallback(async () => {
@@ -458,8 +448,11 @@ export function App(): React.ReactElement {
         tags: selectedTags,
         parentStoryId: hierarchyContext.userStory?.id,
       }));
-      const retryResults = await runWithAuth((token) =>
-        createTasks(token, azureOrg, azureProjectId, tasks)
+      const retryResults = await createTasks(
+        auth.accessToken!,
+        azureOrg,
+        azureProjectId,
+        tasks
       );
 
       // Merge retried results back over the originals by taskId.
@@ -495,7 +488,6 @@ export function App(): React.ReactElement {
     azureProjectId,
     handleSessionExpired,
     stampDedup,
-    runWithAuth,
   ]);
 
   const handleViewInAzure = useCallback(() => {
@@ -543,8 +535,8 @@ export function App(): React.ReactElement {
 
       {screen === 'connect-azure' && (
         <ConnectAzureScreen
-          frameCount={frameCount}
           isAuthenticated={auth.isAuthenticated}
+          savedUrl={storage.azureUrl}
           onConnect={handleConnectAzure}
           onContinue={() => setScreen('select-project')}
           onDisconnect={handleDisconnect}
@@ -556,15 +548,15 @@ export function App(): React.ReactElement {
         <SelectProjectScreen
           accessToken={auth.accessToken!}
           workItemType={workItemType}
+          connectedOrg={azureOrg}
           savedOrg={storage.azureOrg}
-          savedProjectId={storage.azureProjectId}
+          savedProjectId={azureProjectId || storage.azureProjectId}
           savedEpicId={storage.lastEpicId}
           savedFeatureId={storage.lastFeatureId}
           savedStoryId={storage.lastStoryId}
           savedFrequentTags={storage.frequentTags}
           onContinue={handleProjectSelected}
           onSessionExpired={handleSessionExpired}
-          onRefreshToken={auth.refresh}
           onBack={() => setScreen('home')}
         />
       )}

@@ -114,6 +114,13 @@ export class TimeoutError extends Error {
   }
 }
 
+// Azure DevOps PATs authenticate via HTTP Basic with an empty username:
+// `Authorization: Basic base64(":" + PAT)`. `token` here is the user's PAT,
+// forwarded by the plugin in the request's Authorization header.
+function patAuthHeader(token: string): string {
+  return `Basic ${Buffer.from(`:${token}`).toString('base64')}`;
+}
+
 async function azureFetch(
   url: string,
   accessToken: string,
@@ -128,7 +135,7 @@ async function azureFetch(
         ...options,
         signal: controller.signal,
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: patAuthHeader(accessToken),
           'Content-Type': 'application/json',
           ...options.headers,
         },
