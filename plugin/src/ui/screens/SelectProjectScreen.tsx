@@ -90,19 +90,12 @@ export function SelectProjectScreen({
     return false;
   };
 
-  // Check if an error message indicates auth failure
-  const isLikelyAuthError = (err: unknown): boolean => {
-    if (err instanceof Error && err.name === 'AuthError') return true;
-    const msg = err instanceof Error ? err.message.toLowerCase() : '';
-    return (
-      msg.includes('session expired') ||
-      msg.includes('unauthorized') ||
-      msg.includes('authentication') ||
-      msg.includes('token') ||
-      msg.includes('401') ||
-      msg.includes('403')
-    );
-  };
+  // The backend returns HTTP 401 only for real auth failures, which request()
+  // surfaces as AuthError. Rely on that — don't sniff message substrings like
+  // "401"/"403"/"token", which match Azure error codes (VS403xxx) and ordinary
+  // errors, causing false "token rejected" bounces.
+  const isLikelyAuthError = (err: unknown): boolean =>
+    err instanceof Error && err.name === 'AuthError';
 
   // The org comes from the connect URL — no listing call. Just pin it.
   useEffect(() => {
@@ -238,6 +231,8 @@ export function SelectProjectScreen({
         if (isCancelled) return;
         if (isLikelyAuthError(err)) {
           await handleAuthError();
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load epics, stories, or tags');
         }
       } finally {
         if (!isCancelled) setLoading(false);

@@ -3,20 +3,14 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 // Check if an error is an Azure auth error (works after bundling)
 export function isAzureAuthError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  // Check error name (set by AzureAuthError class)
+  // Set by the AzureAuthError class (the source of truth — processResponse only
+  // throws it for real 401/403 responses).
   if (error.name === 'AzureAuthError') return true;
-  // Also check message for common auth patterns
-  const msg = error.message.toLowerCase();
-  return (
-    msg.includes('authentication failed') ||
-    msg.includes('unauthorized') ||
-    msg.includes('not authorized') ||
-    msg.includes('token expired') ||
-    msg.includes('invalid token') ||
-    msg.includes('access denied') ||
-    msg.includes('401') ||
-    msg.includes('403')
-  );
+  // Reconstructed errors (e.g. bulk-create result strings) lose the class name,
+  // so also match the message prefix AzureAuthError uses. Do NOT match bare
+  // "401"/"403" — those collide with Azure error codes like VS403xxx / TF401xxx
+  // and would misclassify ordinary 400s (e.g. WIQL errors) as auth failures.
+  return error.message.toLowerCase().includes('authentication failed');
 }
 
 export function getAccessToken(req: VercelRequest): string | null {
