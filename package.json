@@ -4,11 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vercel dev",
-    "typecheck": "tsc --noEmit",
-    "migrate": "node scripts/migrate.mjs migrations/001_init.sql"
-  },
-  "dependencies": {
-    "@neondatabase/serverless": "^0.10.4"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^25.1.0",
