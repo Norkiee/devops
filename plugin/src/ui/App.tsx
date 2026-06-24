@@ -550,7 +550,7 @@ export function App(): React.ReactElement {
         <SelectProjectScreen
           accessToken={auth.accessToken!}
           workItemType={workItemType}
-          connectedOrg={azureOrg}
+          connectedOrg={azureOrg || storage.azureOrg || ''}
           savedOrg={storage.azureOrg}
           savedProjectId={azureProjectId || storage.azureProjectId}
           savedEpicId={storage.lastEpicId}

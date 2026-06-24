@@ -180,10 +180,14 @@ export interface PluginStorage {
   lastFeatureId?: number;
   lastWorkItemType?: WorkItemType;
   frequentTags?: string[];
-  // The Azure DevOps org/project URL the user connected with. Non-secret, so it
-  // is persisted to pre-fill the connect form on the next session. The PAT
-  // itself is deliberately NOT persisted — it lives in memory only.
+  // The Azure DevOps org/project URL the user connected with (non-secret),
+  // persisted to pre-fill the connect form.
   azureUrl?: string;
+  // Azure DevOps personal access token. Stored on this device only via
+  // figma.clientStorage — sandboxed to this plugin and never uploaded to Figma
+  // or our backend — so the user stays connected across sessions. Wiped on
+  // Disconnect. Treat with the same care as a saved password.
+  pat?: string;
 }
 
 export type Screen =
