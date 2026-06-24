@@ -12,9 +12,6 @@ interface ConnectAzureScreenProps {
   onBack: () => void;
 }
 
-const PAT_DOCS_URL =
-  'https://learn.microsoft.com/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate';
-
 // Parse an Azure DevOps URL into { org, project? }. Accepts:
 //   https://dev.azure.com/{org}/{project}
 //   https://{org}.visualstudio.com/{project}
@@ -97,7 +94,6 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     marginBottom: '4px',
   },
-  link: { color: '#01786A', textDecoration: 'underline' },
 };
 
 export function ConnectAzureScreen({
@@ -205,7 +201,7 @@ export function ConnectAzureScreen({
         Enter your project URL and a personal access token.
       </p>
 
-      <div style={{ width: '100%' }}>
+      <div style={{ width: '100%', maxWidth: '240px', textAlign: 'left' }}>
         <label style={styles.label}>Project URL</label>
         <input
           style={styles.input}
@@ -231,10 +227,7 @@ export function ConnectAzureScreen({
 
         <p style={styles.help}>
           Create a token in Azure DevOps → User settings → Personal access tokens, scoped to{' '}
-          <strong>Work Items (read, write &amp; manage)</strong>. It’s kept only for this session.{' '}
-          <a style={styles.link} href={PAT_DOCS_URL} target="_blank" rel="noopener noreferrer">
-            How?
-          </a>
+          <strong>Work Items (read, write &amp; manage)</strong>. It’s kept only for this session.
         </p>
       </div>
 
