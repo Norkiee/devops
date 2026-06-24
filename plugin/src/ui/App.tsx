@@ -124,7 +124,9 @@ export function App(): React.ReactElement {
   // back to paste a valid one.
   const handleSessionExpired = useCallback(() => {
     auth.logout();
-    setError('Your token was rejected. Please reconnect with a valid Azure DevOps personal access token.');
+    setError(
+      'Your token was rejected — it may be expired or missing the Work Items (read, write & manage) scope. Please reconnect.'
+    );
     setScreen('connect-azure');
   }, [auth]);
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../components/Button';
-import { fetchProjects } from '../services/api';
+import { fetchProjects, fetchWorkItemTypes } from '../services/api';
 
 interface ConnectAzureScreenProps {
   isAuthenticated: boolean;
@@ -138,11 +138,14 @@ export function ConnectAzureScreen({
           return;
         }
         projectId = match.id;
+        // Listing projects needs only a basic scope; probe a Work Items endpoint
+        // so a PAT that's missing the Work Items scope is caught here, not later.
+        await fetchWorkItemTypes(token, parsed.org, projectId);
       }
       onConnect({ pat: token, org: parsed.org, projectId, url: url.trim() });
     } catch {
       setError(
-        'Couldn’t connect. Check the URL and that your token is valid with the Work Items (read, write & manage) scope.'
+        'Couldn’t connect. Check that the URL is right and your token is valid, not expired, and has the Work Items (read, write & manage) scope.'
       );
     } finally {
       setValidating(false);
