@@ -303,6 +303,8 @@ export function SelectProjectScreen({
         if (isCancelled) return;
         if (isLikelyAuthError(err)) {
           await handleAuthError();
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load stories for this epic');
         }
       } finally {
         if (!isCancelled) setLoading(false);
@@ -483,8 +485,9 @@ export function SelectProjectScreen({
   // Determine if selectors should be shown
   const showEpicSelector = projectId && hasEpics && epics.length > 0 && workItemType !== 'Epic';
   const showFeatureSelector = hasFeatures && workItemType === 'UserStory' && epicId && features.length > 0;
-  // For Tasks, show User Story selector
-  const showStorySelector = workItemType === 'Task' && hasUserStories && stories.length > 0;
+  // For Tasks, show the User Story selector whenever the project has story-like
+  // types — even if the selected epic has none yet, so the control doesn't vanish.
+  const showStorySelector = workItemType === 'Task' && hasUserStories;
 
   // For Tasks, filter stories by selected Epic (if any)
   const filteredStories = useMemo(() => {

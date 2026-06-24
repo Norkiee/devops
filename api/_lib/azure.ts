@@ -533,15 +533,23 @@ export async function queryEpics(
 export async function queryStoriesByEpic(
   opts: AzureApiOptions & { projectId: string; epicId: number }
 ): Promise<AzureStory[]> {
-  // Stories usually sit under Features (Epic → Feature → Story), so a one-hop
-  // child query misses them. Walk the entire hierarchy under the epic with a
-  // recursive tree query, then keep only the story-like, still-open descendants.
+  // Stories sit directly under the epic or under its features (Epic → Feature →
+  // Story). Collect the epic + its feature ids, then find story-like work items
+  // whose parent is any of those. Plain field queries (System.Parent) are more
+  // reliable across projects than a recursive WIQL tree query.
+  const features = await queryFeaturesByEpic(opts);
+  const parentIds = [opts.epicId, ...features.map((f) => f.id)];
+
+  const storyTypesClause = STORY_LIKE_TYPES.map((t) => `'${t}'`).join(', ');
+  const parentClause = parentIds.join(', ');
   const wiqlQuery = {
     query: `SELECT [System.Id]
-            FROM WorkItemLinks
-            WHERE ([Source].[System.Id] = ${opts.epicId})
-            AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward')
-            MODE (Recursive)`,
+            FROM WorkItems
+            WHERE [System.WorkItemType] IN (${storyTypesClause})
+            AND [System.Parent] IN (${parentClause})
+            AND [System.State] <> 'Closed'
+            AND [System.State] <> 'Removed'
+            ORDER BY [System.ChangedDate] DESC`,
   };
 
   const wiqlResponse = await azureFetch(
@@ -549,10 +557,10 @@ export async function queryStoriesByEpic(
     opts.accessToken,
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
-  const wiqlData = (await wiqlResponse.json()) as WorkItemRelationsResponse;
-  // The tree can contain many features + stories; allow a generous cap.
-  const ids = extractTargetIds(wiqlData, 200);
-
+  const wiqlData = (await wiqlResponse.json()) as {
+    workItems?: Array<{ id: number }>;
+  };
+  const ids = (wiqlData.workItems || []).slice(0, 200).map((wi) => wi.id);
   if (ids.length === 0) {
     return [];
   }
@@ -567,19 +575,12 @@ export async function queryStoriesByEpic(
     value: Array<{ id: number; fields: Record<string, string> }>;
   };
 
-  // Descendants include Features and other types — keep only story-like ones
-  // that are still open (the WIQL no longer filters by type/state).
-  const storyTypes = new Set<string>(STORY_LIKE_TYPES);
-  return detailData.value
-    .map((wi) => ({
-      id: wi.id,
-      title: wi.fields['System.Title'],
-      state: wi.fields['System.State'],
-      type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-    }))
-    .filter(
-      (wi) => storyTypes.has(wi.type) && wi.state !== 'Closed' && wi.state !== 'Removed'
-    );
+  return detailData.value.map((wi) => ({
+    id: wi.id,
+    title: wi.fields['System.Title'],
+    state: wi.fields['System.State'],
+    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
+  }));
 }
 
 export interface ExistingWorkItem {
