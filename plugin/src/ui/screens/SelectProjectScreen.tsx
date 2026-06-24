@@ -536,6 +536,7 @@ export function SelectProjectScreen({
 
         {showEpicSelector && (
           <Select
+            searchable
             label={workItemType === 'Feature' || workItemType === 'Task' ? 'Epic (Optional)' : 'Epic'}
             value={epicId}
             onChange={(val) => {
@@ -587,6 +588,7 @@ export function SelectProjectScreen({
 
         {showStorySelector && (
           <Select
+            searchable
             label="User Story"
             value={storyId}
             onChange={setStoryId}

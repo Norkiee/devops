@@ -11,6 +11,8 @@ interface SelectProps {
   onChange: (value: string) => void;
   options: SelectOption[];
   placeholder?: string;
+  // When true, the dropdown shows a filter box (useful for long lists).
+  searchable?: boolean;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -73,6 +75,22 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: 'auto',
     padding: '4px',
   },
+  search: {
+    width: '100%',
+    padding: '8px 10px',
+    fontSize: '13px',
+    fontFamily: 'inherit',
+    border: '1px solid #E6ECF0',
+    borderRadius: '8px',
+    boxSizing: 'border-box',
+    marginBottom: '4px',
+    outline: 'none',
+  },
+  empty: {
+    padding: '10px 12px',
+    fontSize: '13px',
+    color: '#999999',
+  },
   option: {
     display: 'flex',
     alignItems: 'center',
@@ -101,13 +119,22 @@ export function Select({
   onChange,
   options,
   placeholder,
+  searchable = false,
 }: SelectProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
   const displayText = selectedOption?.label || placeholder || 'Select...';
+
+  const filteredOptions =
+    searchable && query.trim()
+      ? options.filter((opt) =>
+          opt.label.toLowerCase().includes(query.trim().toLowerCase())
+        )
+      : options;
 
   // Only add click-outside listener when dropdown is open
   useEffect(() => {
@@ -121,6 +148,11 @@ export function Select({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  // Clear the filter whenever the dropdown closes.
+  useEffect(() => {
+    if (!isOpen) setQuery('');
   }, [isOpen]);
 
   const handleSelect = (optValue: string) => {
@@ -166,9 +198,24 @@ export function Select({
         </svg>
       </div>
 
-      {isOpen && options.length > 0 && (
+      {isOpen && (
         <div style={styles.dropdown}>
-          {options.map((opt, index) => {
+          {searchable && (
+            <input
+              style={styles.search}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              aria-label="Search options"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+          {filteredOptions.length === 0 ? (
+            <div style={styles.empty}>No matches</div>
+          ) : (
+            filteredOptions.map((opt, index) => {
             const isSelected = opt.value === value;
             const isHovered = hoveredIndex === index;
 
@@ -203,7 +250,8 @@ export function Select({
                 )}
               </div>
             );
-          })}
+            })
+          )}
         </div>
       )}
     </div>

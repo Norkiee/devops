@@ -533,16 +533,15 @@ export async function queryEpics(
 export async function queryStoriesByEpic(
   opts: AzureApiOptions & { projectId: string; epicId: number }
 ): Promise<AzureStory[]> {
-  const storyTypesClause = STORY_LIKE_TYPES.map(t => `'${t}'`).join(', ');
+  // Stories usually sit under Features (Epic → Feature → Story), so a one-hop
+  // child query misses them. Walk the entire hierarchy under the epic with a
+  // recursive tree query, then keep only the story-like, still-open descendants.
   const wiqlQuery = {
-    query: `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]
+    query: `SELECT [System.Id]
             FROM WorkItemLinks
             WHERE ([Source].[System.Id] = ${opts.epicId})
             AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward')
-            AND ([Target].[System.WorkItemType] IN (${storyTypesClause}))
-            AND ([Target].[System.State] <> 'Closed')
-            AND ([Target].[System.State] <> 'Removed')
-            MODE (MustContain)`,
+            MODE (Recursive)`,
   };
 
   const wiqlResponse = await azureFetch(
@@ -551,7 +550,8 @@ export async function queryStoriesByEpic(
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
   const wiqlData = (await wiqlResponse.json()) as WorkItemRelationsResponse;
-  const ids = extractTargetIds(wiqlData);
+  // The tree can contain many features + stories; allow a generous cap.
+  const ids = extractTargetIds(wiqlData, 200);
 
   if (ids.length === 0) {
     return [];
@@ -567,12 +567,19 @@ export async function queryStoriesByEpic(
     value: Array<{ id: number; fields: Record<string, string> }>;
   };
 
-  return detailData.value.map((wi) => ({
-    id: wi.id,
-    title: wi.fields['System.Title'],
-    state: wi.fields['System.State'],
-    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-  }));
+  // Descendants include Features and other types — keep only story-like ones
+  // that are still open (the WIQL no longer filters by type/state).
+  const storyTypes = new Set<string>(STORY_LIKE_TYPES);
+  return detailData.value
+    .map((wi) => ({
+      id: wi.id,
+      title: wi.fields['System.Title'],
+      state: wi.fields['System.State'],
+      type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
+    }))
+    .filter(
+      (wi) => storyTypes.has(wi.type) && wi.state !== 'Closed' && wi.state !== 'Removed'
+    );
 }
 
 export interface ExistingWorkItem {
