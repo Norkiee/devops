@@ -201,7 +201,7 @@ export function ConnectAzureScreen({
         Enter your project URL and a personal access token.
       </p>
 
-      <div style={{ width: '100%', maxWidth: '240px', textAlign: 'left' }}>
+      <div style={{ width: '100%', maxWidth: '460px', textAlign: 'left' }}>
         <label style={styles.label}>Project URL</label>
         <input
           style={styles.input}
