@@ -101,7 +101,6 @@ export interface TaskToSubmit {
   taskId: string;
   title: string;
   description?: string;
-  tags: string[];
   // Optional: some teams list tasks with no parent story, so tasks can be
   // created unparented.
   parentStoryId?: number;
@@ -179,7 +178,6 @@ export interface PluginStorage {
   lastEpicId?: number;
   lastFeatureId?: number;
   lastWorkItemType?: WorkItemType;
-  frequentTags?: string[];
   // The Azure DevOps org/project URL the user connected with (non-secret),
   // persisted to pre-fill the connect form.
   azureUrl?: string;

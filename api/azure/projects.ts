@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { listProjects, getWorkItemTypes, getTags } from '../_lib/azure';
+import { listProjects, getWorkItemTypes } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
 export default async function handler(
@@ -17,23 +17,10 @@ export default async function handler(
   if (!auth) return;
 
   const projectId = req.query.projectId;
-  const include = req.query.include; // 'types' or 'tags'
 
-  // If projectId is provided with include parameter
+  // If a projectId is provided, return its work item types.
   if (projectId && typeof projectId === 'string') {
     try {
-      if (include === 'tags') {
-        // Fetch tags for the project
-        const tags = await getTags({
-          org: auth.org,
-          accessToken: auth.accessToken,
-          projectId,
-        });
-        res.status(200).json({ tags });
-        return;
-      }
-
-      // Default: fetch work item types for the project
       const workItemTypes = await getWorkItemTypes({
         org: auth.org,
         accessToken: auth.accessToken,

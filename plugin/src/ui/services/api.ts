@@ -178,18 +178,6 @@ export async function closeTasks(
   return data.closeResults;
 }
 
-export async function fetchTags(
-  accessToken: string,
-  org: string,
-  projectId: string
-): Promise<string[]> {
-  const data = await request<{ tags: string[] }>(
-    `/api/azure/projects?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}&include=tags`,
-    { headers: authHeaders(accessToken) }
-  );
-  return data.tags;
-}
-
 export async function createTasks(
   accessToken: string,
   org: string,
@@ -208,7 +196,6 @@ export async function createTasks(
           title: t.title,
           description: t.description,
           parentStoryId: t.parentStoryId,
-          tags: t.tags,
         })),
       }),
     }

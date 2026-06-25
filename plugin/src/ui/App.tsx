@@ -56,7 +56,6 @@ export function App(): React.ReactElement {
 
   // Azure connection state
   const [parentTitle, setParentTitle] = useState('');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [azureOrg, setAzureOrg] = useState('');
   const [azureProjectId, setAzureProjectId] = useState('');
 
@@ -94,14 +93,12 @@ export function App(): React.ReactElement {
       projectId: string;
       availableTypes: WorkItemTypeInfo[];
       hierarchyContext: HierarchyContext;
-      selectedTags: string[];
       parentTitle: string;
     }) => {
       setAzureOrg(selection.org);
       setAzureProjectId(selection.projectId);
       setAvailableTypes(selection.availableTypes);
       setHierarchyContext(selection.hierarchyContext);
-      setSelectedTags(selection.selectedTags);
       setParentTitle(selection.parentTitle);
 
       // Save to storage
@@ -111,7 +108,6 @@ export function App(): React.ReactElement {
         lastEpicId: selection.hierarchyContext.epic?.id,
         lastFeatureId: selection.hierarchyContext.feature?.id,
         lastStoryId: selection.hierarchyContext.userStory?.id,
-        frequentTags: selection.selectedTags.slice(0, 5),
       });
 
       // Go straight to context screen
@@ -295,13 +291,6 @@ export function App(): React.ReactElement {
     []
   );
 
-  const handleRemoveTag = useCallback(
-    (frameId: string, workItemId: string, tag: string) => {
-      setSelectedTags((prev) => prev.filter((t) => t !== tag));
-    },
-    []
-  );
-
   const getSelectedWorkItems = useCallback(() => {
     const items: WorkItem[] = [];
     for (const fwi of frameWorkItems) {
@@ -350,7 +339,6 @@ export function App(): React.ReactElement {
         taskId: item.id,
         title: item.title,
         description: item.description,
-        tags: selectedTags,
         parentStoryId: hierarchyContext.userStory?.id,
       }));
       const submitResults = await createTasks(
@@ -378,7 +366,6 @@ export function App(): React.ReactElement {
   }, [
     getSelectedWorkItems,
     workItemType,
-    selectedTags,
     hierarchyContext,
     auth.accessToken,
     azureOrg,
@@ -447,7 +434,6 @@ export function App(): React.ReactElement {
         taskId: item.id,
         title: item.title,
         description: item.description,
-        tags: selectedTags,
         parentStoryId: hierarchyContext.userStory?.id,
       }));
       const retryResults = await createTasks(
@@ -483,7 +469,6 @@ export function App(): React.ReactElement {
     results,
     getSelectedWorkItems,
     workItemType,
-    selectedTags,
     hierarchyContext,
     auth.accessToken,
     azureOrg,
@@ -514,10 +499,9 @@ export function App(): React.ReactElement {
       taskId: item.id,
       title: item.title,
       description: item.description,
-      tags: selectedTags,
       parentStoryId: hierarchyContext.userStory?.id,
     }));
-  }, [getSelectedWorkItems, selectedTags, hierarchyContext]);
+  }, [getSelectedWorkItems, hierarchyContext]);
 
   return (
     <div className="plugin-container" ref={containerRef}>
@@ -556,7 +540,6 @@ export function App(): React.ReactElement {
           savedEpicId={storage.lastEpicId}
           savedFeatureId={storage.lastFeatureId}
           savedStoryId={storage.lastStoryId}
-          savedFrequentTags={storage.frequentTags}
           onContinue={handleProjectSelected}
           onSessionExpired={handleSessionExpired}
           onBack={() => setScreen('home')}
@@ -575,12 +558,10 @@ export function App(): React.ReactElement {
         <ReviewScreen
           frameWorkItems={frameWorkItems}
           workItemType={workItemType}
-          selectedTags={selectedTags}
           parentTitle={parentTitle}
           onWorkItemUpdate={handleWorkItemUpdate}
           onWorkItemToggle={handleWorkItemToggle}
           onSelectSection={handleSelectSection}
-          onRemoveTag={handleRemoveTag}
           onSubmit={handleSubmit}
           onClose={handleClose}
           onBack={() => setScreen('context')}
@@ -602,7 +583,6 @@ export function App(): React.ReactElement {
           workItemType={workItemType}
           action={action}
           parentTitle={parentTitle}
-          tags={selectedTags}
           onViewInAzure={handleViewInAzure}
           onGoHome={handleGoHome}
         />

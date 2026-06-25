@@ -6,12 +6,10 @@ import { WorkItemCard } from '../components/WorkItemCard';
 interface ReviewScreenProps {
   frameWorkItems: FrameWorkItems[];
   workItemType: WorkItemType;
-  selectedTags: string[];
   parentTitle: string;
   onWorkItemUpdate: (frameId: string, workItemId: string, updates: Partial<WorkItem>) => void;
   onWorkItemToggle: (frameId: string, workItemId: string) => void;
   onSelectSection: (section: 'new' | 'open', selected: boolean) => void;
-  onRemoveTag: (frameId: string, workItemId: string, tag: string) => void;
   onSubmit: () => void;
   onClose?: () => void;
   onBack: () => void;
@@ -136,12 +134,10 @@ function SelectAllCheckbox({
 export function ReviewScreen({
   frameWorkItems,
   workItemType,
-  selectedTags,
   parentTitle,
   onWorkItemUpdate,
   onWorkItemToggle,
   onSelectSection,
-  onRemoveTag,
   onSubmit,
   onClose,
   onBack,
@@ -181,7 +177,6 @@ export function ReviewScreen({
       workItemType={workItemType}
       title={item.title}
       description={item.description}
-      tags={selectedTags}
       selected={item.selected}
       existing={item.existing}
       closed={item.closed}
@@ -190,7 +185,6 @@ export function ReviewScreen({
       onDescriptionChange={(description) =>
         onWorkItemUpdate(item.frameId, item.id, { description })
       }
-      onRemoveTag={(tag) => onRemoveTag(item.frameId, item.id, tag)}
     />
   );
 

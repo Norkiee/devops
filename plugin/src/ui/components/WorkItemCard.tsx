@@ -1,17 +1,14 @@
 import React, { useRef, useEffect } from 'react';
 import { WorkItemType } from '../types';
-import { Tag } from './Tag';
 
 interface WorkItemCardProps {
   workItemType: WorkItemType;
   title: string;
   description?: string;
-  tags: string[];
   selected: boolean;
   onToggleSelect: () => void;
   onTitleChange: (title: string) => void;
   onDescriptionChange?: (description: string) => void;
-  onRemoveTag: (tag: string) => void;
   // Plugin 1 close flow: an item already in Azure renders read-only. `closed`
   // ones show a done badge with no action; open `existing` ones offer a
   // "close" checkbox instead of "create".
@@ -116,12 +113,10 @@ export function WorkItemCard({
   workItemType,
   title,
   description,
-  tags,
   selected,
   onToggleSelect,
   onTitleChange,
   onDescriptionChange,
-  onRemoveTag,
   existing = false,
   closed = false,
 }: WorkItemCardProps): React.ReactElement {
@@ -222,13 +217,6 @@ export function WorkItemCard({
                   style={styles.textarea}
                   placeholder="Description..."
                 />
-              )}
-              {tags.length > 0 && (
-                <div style={styles.tagsRow}>
-                  {tags.map((tag) => (
-                    <Tag key={tag} label={tag} onRemove={() => onRemoveTag(tag)} />
-                  ))}
-                </div>
               )}
             </>
           ) : (

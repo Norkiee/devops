@@ -293,17 +293,6 @@ export async function queryStories(
   return fetchWorkItemsByIds(opts, ids);
 }
 
-export async function getTags(
-  opts: AzureApiOptions & { projectId: string }
-): Promise<string[]> {
-  const response = await azureFetch(
-    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/tags?api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const data = (await response.json()) as { value: Array<{ name: string }> };
-  return data.value.map((t) => t.name);
-}
-
 // A Task state name paired with its metastate category (Proposed, InProgress,
 // Resolved, Completed, Removed). The category is the process-independent way to
 // find "in progress" or "done" regardless of the state's display name.
@@ -386,11 +375,6 @@ export async function createTask(
 ): Promise<{ id: number; url: string; stateTransitioned: boolean; transitionError?: string }> {
   const patchDoc: Array<{ op: string; path: string; value: unknown }> = [
     { op: 'add', path: '/fields/System.Title', value: task.title },
-    {
-      op: 'add',
-      path: '/fields/System.Tags',
-      value: task.tags.join('; '),
-    },
   ];
 
   // Link to a parent user story only when one was chosen. Some teams list tasks

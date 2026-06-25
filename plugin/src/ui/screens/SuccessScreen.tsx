@@ -9,7 +9,6 @@ interface SuccessScreenProps {
   workItemType?: WorkItemType;
   action?: 'create' | 'close';
   parentTitle: string;
-  tags: string[];
   onViewInAzure: () => void;
   onGoHome: () => void;
 }
@@ -48,7 +47,6 @@ export function SuccessScreen({
   workItemType = 'Task',
   action = 'create',
   parentTitle,
-  tags,
   onViewInAzure,
   onGoHome,
 }: SuccessScreenProps): React.ReactElement {
@@ -80,11 +78,7 @@ export function SuccessScreen({
       {!isClose && parentTitle && (
         <p style={styles.detail}>
           {parent}: {parentTitle}
-          {tags.length > 0 && ` | Tags: ${tags.join(', ')}`}
         </p>
-      )}
-      {!isClose && !parentTitle && tags.length > 0 && (
-        <p style={styles.detail}>Tags: {tags.join(', ')}</p>
       )}
 
       <div className="screen-footer" style={styles.buttons}>

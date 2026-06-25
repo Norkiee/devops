@@ -17,7 +17,6 @@ export interface AzureTask {
   description: string;
   // Optional: tasks may be created without a parent user story.
   parentStoryId?: number;
-  tags: string[];
   // Process-specific state name. Agile→Active, Basic→Doing, Scrum→In Progress.
   // Resolved at runtime per project (see getTaskInProgressState), not hardcoded.
   state: string;
@@ -81,7 +80,6 @@ export interface TaskToCreate {
   description: string;
   // Optional: tasks may be created without a parent user story.
   parentStoryId?: number;
-  tags: string[];
 }
 
 export interface CreateTaskResult {

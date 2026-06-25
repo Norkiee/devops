@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AzureProject, WorkItemTypeInfo, WorkItemType, AzureStory, HierarchyContext, AzureWorkItemDetails, isStoryLikeType } from '../types';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
-import { Tag } from '../components/Tag';
 import {
   fetchProjects,
   fetchWorkItemTypes,
@@ -12,7 +11,6 @@ import {
   fetchStoriesByEpic,
   fetchStoriesByFeature,
   fetchWorkItemDetails,
-  fetchTags,
 } from '../services/api';
 
 interface SelectProjectScreenProps {
@@ -26,13 +24,11 @@ interface SelectProjectScreenProps {
   savedEpicId?: number;
   savedFeatureId?: number;
   savedStoryId?: number;
-  savedFrequentTags?: string[];
   onContinue: (selection: {
     org: string;
     projectId: string;
     availableTypes: WorkItemTypeInfo[];
     hierarchyContext: HierarchyContext;
-    selectedTags: string[];
     parentTitle: string;
   }) => void;
   onSessionExpired: () => void;
@@ -48,7 +44,6 @@ export function SelectProjectScreen({
   savedEpicId,
   savedFeatureId,
   savedStoryId,
-  savedFrequentTags,
   onContinue,
   onSessionExpired,
   onBack,
@@ -71,10 +66,6 @@ export function SelectProjectScreen({
   const [stories, setStories] = useState<AzureStory[]>([]);
   const [storyId, setStoryId] = useState(savedStoryId?.toString() || '');
   const [storyDetails, setStoryDetails] = useState<AzureWorkItemDetails | null>(null);
-
-  // Tags state
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>(savedFrequentTags || []);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -170,12 +161,12 @@ export function SelectProjectScreen({
     return () => { isCancelled = true; };
   }, [accessToken, org, projectId]);
 
-  // Fetch epics, stories (for Tasks), and tags when project is selected
+  // Fetch epics when a project is selected
   useEffect(() => {
     if (!org || !projectId || workItemType === 'Epic') return;
     let isCancelled = false;
 
-    const loadEpicsStoriesAndTags = async () => {
+    const loadEpics = async () => {
       setEpics([]);
       setEpicId('');
       setEpicDetails(null);
@@ -187,13 +178,9 @@ export function SelectProjectScreen({
       setStoryDetails(null);
       setLoading(true);
       try {
-        const [fetchedEpics, fetchedTags] = await Promise.all([
-          fetchEpics(accessToken, org, projectId),
-          fetchTags(accessToken, org, projectId),
-        ]);
+        const fetchedEpics = await fetchEpics(accessToken, org, projectId);
         if (isCancelled) return;
         setEpics(fetchedEpics);
-        setAvailableTags(fetchedTags);
 
         // Stories are loaded by the dedicated Task stories effect, which keys off
         // the epic/feature selection — so they aren't fetched here.
@@ -207,14 +194,14 @@ export function SelectProjectScreen({
         if (isLikelyAuthError(err)) {
           await handleAuthError();
         } else {
-          setError(err instanceof Error ? err.message : 'Failed to load epics, stories, or tags');
+          setError(err instanceof Error ? err.message : 'Failed to load epics');
         }
       } finally {
         if (!isCancelled) setLoading(false);
       }
     };
 
-    loadEpicsStoriesAndTags();
+    loadEpics();
     return () => { isCancelled = true; };
   }, [accessToken, org, projectId, workItemType, savedEpicId, savedStoryId]);
 
@@ -367,12 +354,6 @@ export function SelectProjectScreen({
     return () => { isCancelled = true; };
   }, [accessToken, org, storyId, workItemType]);
 
-  const toggleTag = (tag: string): void => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  };
-
   // Determine if we can continue based on work item type
   const canContinue = (() => {
     if (!org || !projectId || availableTypes.length === 0) return false;
@@ -447,7 +428,6 @@ export function SelectProjectScreen({
       projectId,
       availableTypes,
       hierarchyContext,
-      selectedTags,
       parentTitle,
     });
   };
@@ -470,7 +450,6 @@ export function SelectProjectScreen({
     // Filter will be handled by fetching stories under epic when epic changes
     return stories;
   }, [workItemType, epicId, stories]);
-  const showTags = projectId && availableTags.length > 0 && workItemType !== 'Epic';
 
   return (
     <div className="screen">
@@ -588,32 +567,6 @@ export function SelectProjectScreen({
               })),
             ]}
           />
-        )}
-
-        {showTags && (
-          <div>
-            <label
-              style={{
-                fontSize: '12px',
-                fontWeight: 500,
-                color: '#666666',
-                display: 'block',
-                marginBottom: '4px',
-              }}
-            >
-              Tags
-            </label>
-            <div className="tags-container">
-              {availableTags.slice(0, 30).map((tag) => (
-                <Tag
-                  key={tag}
-                  label={tag}
-                  selected={selectedTags.includes(tag)}
-                  onClick={() => toggleTag(tag)}
-                />
-              ))}
-            </div>
-          </div>
         )}
 
         {projectId && loading && (
