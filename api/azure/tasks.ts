@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createTask, getCurrentUser, getTaskInProgressState, getTaskClosedState, setTaskState, settleWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
+import { createTask, getCurrentUser, getTaskInProgressState, getTaskClosedState, setTaskState, settleWithConcurrency, getWorkItemPaths, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
 import { TaskToCreate, CreateTaskResult } from '../_lib/types';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
@@ -109,12 +109,30 @@ export default async function handler(
         projectId,
       });
 
+      // Look up the Area/Iteration path of each distinct parent once, so tasks
+      // inherit them and land in the parent's team area instead of the project
+      // root (which may be owned by another team).
+      const parentIds = [
+        ...new Set(tasks!.map((t) => t.parentStoryId).filter((id): id is number => typeof id === 'number')),
+      ];
+      const parentPaths = new Map<number, { areaPath?: string; iterationPath?: string }>();
+      await Promise.all(
+        parentIds.map(async (pid) => {
+          try {
+            parentPaths.set(pid, await getWorkItemPaths({ org: auth.org, accessToken: auth.accessToken }, pid));
+          } catch (e) {
+            console.error(`Could not read paths for parent ${pid}; task uses the default area:`, e);
+          }
+        })
+      );
+
       // Bounded concurrency + per-task settle: captures both successes and
       // failures without bursting Azure's rate limit or losing partial results.
       const settledResults = await settleWithConcurrency(
         tasks!,
         AZURE_CREATE_CONCURRENCY,
         async (task) => {
+          const paths = task.parentStoryId ? parentPaths.get(task.parentStoryId) : undefined;
           const result = await createTask(
             { org: auth.org, accessToken: auth.accessToken, projectId },
             {
@@ -123,6 +141,8 @@ export default async function handler(
               parentStoryId: task.parentStoryId,
               state: inProgressState,
               assignedTo: currentUserEmail,
+              areaPath: paths?.areaPath,
+              iterationPath: paths?.iterationPath,
             }
           );
           return {

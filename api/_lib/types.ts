@@ -21,6 +21,9 @@ export interface AzureTask {
   // Resolved at runtime per project (see getTaskInProgressState), not hardcoded.
   state: string;
   assignedTo?: string;
+  // Inherited from the parent so the task joins the parent's team area.
+  areaPath?: string;
+  iterationPath?: string;
 }
 
 export interface AzureUserStory {

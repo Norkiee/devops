@@ -369,6 +369,22 @@ export async function setTaskState(
   };
 }
 
+// Read a work item's Area/Iteration path so a child can inherit them.
+export async function getWorkItemPaths(
+  opts: AzureApiOptions,
+  id: number
+): Promise<{ areaPath?: string; iterationPath?: string }> {
+  const response = await azureFetch(
+    `https://dev.azure.com/${seg(opts.org)}/_apis/wit/workitems/${id}?fields=System.AreaPath,System.IterationPath&api-version=${AZURE_API_VERSION}`,
+    opts.accessToken
+  );
+  const data = (await response.json()) as { fields?: Record<string, string> };
+  return {
+    areaPath: data.fields?.['System.AreaPath'],
+    iterationPath: data.fields?.['System.IterationPath'],
+  };
+}
+
 export async function createTask(
   opts: AzureApiOptions & { projectId: string },
   task: AzureTask
@@ -415,6 +431,16 @@ export async function createTask(
       path: '/fields/System.AssignedTo',
       value: task.assignedTo,
     });
+  }
+
+  // Inherit the parent's Area/Iteration path so the task joins the parent's team
+  // area. Without this it defaults to the project root area, which may be owned
+  // by another team (Azure then blocks reordering it in this team's backlog).
+  if (task.areaPath) {
+    patchDoc.push({ op: 'add', path: '/fields/System.AreaPath', value: task.areaPath });
+  }
+  if (task.iterationPath) {
+    patchDoc.push({ op: 'add', path: '/fields/System.IterationPath', value: task.iterationPath });
   }
 
   const response = await azureFetch(
