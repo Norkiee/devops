@@ -227,7 +227,8 @@ export function ConnectAzureScreen({
 
         <p style={styles.help}>
           Create a token in Azure DevOps → User settings → Personal access tokens, scoped to{' '}
-          <strong>Work Items (read, write &amp; manage)</strong>. It’s kept only for this session.
+          <strong>Work Items (read, write &amp; manage)</strong>. It’s saved locally for this plugin
+          until you disconnect.
         </p>
       </div>
 

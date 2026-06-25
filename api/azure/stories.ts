@@ -1,7 +1,12 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryStories, queryStoriesByEpic, createUserStory, getCurrentUser, mapWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
+import { queryStories, queryStoriesByEpic, queryStoriesByFeature } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
-import { UserStoryToCreate, CreateUserStoryResult } from '../_lib/types';
+
+function parsePositiveInt(value: string): number | null {
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : null;
+}
 
 export default async function handler(
   req: VercelRequest,
@@ -21,11 +26,30 @@ export default async function handler(
     }
 
     const epicId = req.query.epicId;
-    const epicIdNum = epicId && typeof epicId === 'string' ? parseInt(epicId, 10) : undefined;
+    const epicIdNum = epicId && typeof epicId === 'string' ? parsePositiveInt(epicId) : undefined;
+    if (epicId && typeof epicId === 'string' && epicIdNum === null) {
+      res.status(400).json({ error: 'epicId must be a positive integer' });
+      return;
+    }
+
+    const featureId = req.query.featureId;
+    const featureIdNum = featureId && typeof featureId === 'string' ? parsePositiveInt(featureId) : undefined;
+    if (featureId && typeof featureId === 'string' && featureIdNum === null) {
+      res.status(400).json({ error: 'featureId must be a positive integer' });
+      return;
+    }
 
     try {
+      // Narrowest filter wins: a feature, else an epic, else all project stories.
       let stories;
-      if (epicIdNum && !isNaN(epicIdNum)) {
+      if (featureIdNum) {
+        stories = await queryStoriesByFeature({
+          org: auth.org,
+          accessToken: auth.accessToken,
+          projectId,
+          featureId: featureIdNum,
+        });
+      } else if (epicIdNum) {
         stories = await queryStoriesByEpic({
           org: auth.org,
           accessToken: auth.accessToken,
@@ -53,88 +77,7 @@ export default async function handler(
 
   // POST: Create user stories
   if (req.method === 'POST') {
-    const { projectId, stories, workItemTypeName } = req.body as {
-      projectId?: string;
-      stories?: UserStoryToCreate[];
-      workItemTypeName?: string; // "User Story" or "Product Backlog Item" etc.
-    };
-
-    if (!projectId || typeof projectId !== 'string') {
-      res.status(400).json({ error: 'Missing projectId in request body' });
-      return;
-    }
-
-    if (!stories || !Array.isArray(stories) || stories.length === 0) {
-      res.status(400).json({ error: 'Missing or empty stories array' });
-      return;
-    }
-
-    // parentEpicId is interpolated into an Azure URL — require a positive integer.
-    if (!stories.every((s) => Number.isInteger(s.parentEpicId) && s.parentEpicId > 0)) {
-      res.status(400).json({ error: 'Each story requires a valid parentEpicId' });
-      return;
-    }
-
-    // Get current user to auto-assign stories
-    let currentUserEmail: string | undefined;
-    try {
-      const currentUser = await getCurrentUser(auth.accessToken, auth.org);
-      currentUserEmail = currentUser.emailAddress;
-    } catch {
-      // Continue without auto-assignment if we can't get current user
-    }
-
-    const results = await mapWithConcurrency(
-      stories,
-      AZURE_CREATE_CONCURRENCY,
-      async (story): Promise<CreateUserStoryResult> => {
-        try {
-          const result = await createUserStory(
-            {
-              org: auth.org,
-              accessToken: auth.accessToken,
-              projectId,
-              workItemTypeName,
-            },
-            {
-              title: story.title,
-              description: story.description,
-              parentEpicId: story.parentEpicId,
-              tags: story.tags,
-              state: 'New',
-              assignedTo: currentUserEmail,
-            }
-          );
-          return {
-            workItemId: story.workItemId,
-            success: true,
-            azureId: result.id,
-            url: result.url,
-          };
-        } catch (error) {
-          console.error(`Failed to create story ${story.workItemId}:`, error);
-          return {
-            workItemId: story.workItemId,
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          };
-        }
-      }
-    );
-
-    const hasAuthError = results.some(
-      (r) => !r.success && r.error && isAzureAuthError(new Error(r.error))
-    );
-
-    if (hasAuthError) {
-      res.status(401).json({
-        error: 'Session expired. Please reconnect to Azure DevOps.',
-        results,
-      });
-      return;
-    }
-
-    res.status(200).json({ results });
+    res.status(410).json({ error: 'Story creation has been removed from this tasklist plugin.' });
     return;
   }
 

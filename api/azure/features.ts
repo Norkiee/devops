@@ -1,22 +1,11 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { queryFeatures, queryFeaturesByEpic, createFeature, getCurrentUser, mapWithConcurrency, AZURE_CREATE_CONCURRENCY } from '../_lib/azure';
-import { AzureFeature } from '../_lib/types';
+import { queryFeatures, queryFeaturesByEpic } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
-interface FeatureToCreate {
-  workItemId: string;
-  title: string;
-  description: string;
-  parentEpicId?: number;
-  tags: string[];
-}
-
-interface CreateFeatureResult {
-  workItemId: string;
-  success: boolean;
-  azureId?: number;
-  url?: string;
-  error?: string;
+function parsePositiveInt(value: string): number | null {
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : null;
 }
 
 export default async function handler(
@@ -41,11 +30,16 @@ export default async function handler(
     try {
       let features;
       if (epicId && typeof epicId === 'string') {
+        const epicIdNum = parsePositiveInt(epicId);
+        if (epicIdNum === null) {
+          res.status(400).json({ error: 'epicId must be a positive integer' });
+          return;
+        }
         features = await queryFeaturesByEpic({
           org: auth.org,
           accessToken: auth.accessToken,
           projectId,
-          epicId: parseInt(epicId, 10),
+          epicId: epicIdNum,
         });
       } else {
         features = await queryFeatures({
@@ -68,86 +62,7 @@ export default async function handler(
 
   // POST: Create features
   if (req.method === 'POST') {
-    const { projectId, features } = req.body as {
-      projectId?: string;
-      features?: FeatureToCreate[];
-    };
-
-    if (!projectId || typeof projectId !== 'string') {
-      res.status(400).json({ error: 'Missing projectId' });
-      return;
-    }
-
-    if (!features || !Array.isArray(features) || features.length === 0) {
-      res.status(400).json({ error: 'No features provided' });
-      return;
-    }
-
-    // parentEpicId is optional, but when present it's interpolated into an Azure
-    // URL — reject anything that isn't a positive integer.
-    if (!features.every(
-      (f) => f.parentEpicId === undefined || (Number.isInteger(f.parentEpicId) && f.parentEpicId > 0)
-    )) {
-      res.status(400).json({ error: 'parentEpicId must be a positive integer when provided' });
-      return;
-    }
-
-    try {
-      // Get current user to auto-assign features
-      const currentUser = await getCurrentUser(auth.accessToken, auth.org);
-
-      const results: CreateFeatureResult[] = await mapWithConcurrency(
-        features,
-        AZURE_CREATE_CONCURRENCY,
-        async (feature): Promise<CreateFeatureResult> => {
-          try {
-            const azureFeature: AzureFeature = {
-              title: feature.title,
-              description: feature.description,
-              parentEpicId: feature.parentEpicId,
-              tags: feature.tags,
-              state: 'New',
-              assignedTo: currentUser.emailAddress,
-            };
-
-            const result = await createFeature(
-              { org: auth.org, accessToken: auth.accessToken, projectId },
-              azureFeature
-            );
-
-            return {
-              workItemId: feature.workItemId,
-              success: true,
-              azureId: result.id,
-              url: result.url,
-            };
-          } catch (err) {
-            return {
-              workItemId: feature.workItemId,
-              success: false,
-              error: err instanceof Error ? err.message : 'Unknown error',
-            };
-          }
-        }
-      );
-
-      const hasAuthError = results.some(
-        (r) => !r.success && r.error && isAzureAuthError(new Error(r.error))
-      );
-      if (hasAuthError) {
-        res.status(401).json({ error: 'Session expired', results });
-        return;
-      }
-
-      res.status(200).json({ results });
-    } catch (error) {
-      console.error('Create features error:', error);
-      if (isAzureAuthError(error)) {
-        res.status(401).json({ error: 'Session expired. Please reconnect to Azure DevOps.' });
-        return;
-      }
-      res.status(500).json({ error: 'Failed to create features' });
-    }
+    res.status(410).json({ error: 'Feature creation has been removed from this tasklist plugin.' });
     return;
   }
 

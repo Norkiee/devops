@@ -110,6 +110,19 @@ export async function fetchStoriesByEpic(
   return data.stories;
 }
 
+export async function fetchStoriesByFeature(
+  accessToken: string,
+  org: string,
+  projectId: string,
+  featureId: number
+): Promise<AzureStory[]> {
+  const data = await request<{ stories: AzureStory[] }>(
+    `/api/azure/stories?org=${encodeURIComponent(org)}&projectId=${encodeURIComponent(projectId)}&featureId=${featureId}`,
+    { headers: authHeaders(accessToken) }
+  );
+  return data.stories;
+}
+
 export async function fetchWorkItemDetails(
   accessToken: string,
   org: string,

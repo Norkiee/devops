@@ -2,6 +2,12 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getWorkItemDetails, getExistingWorkItems } from '../_lib/azure';
 import { requireAuth, handleCors, isAzureAuthError } from '../_lib/auth';
 
+function parsePositiveInt(value: string): number | null {
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -28,14 +34,15 @@ export default async function handler(
       res.status(400).json({ error: 'Missing projectId query parameter' });
       return;
     }
-    const ids = idsParam
-      .split(',')
-      .map((s) => parseInt(s, 10))
-      .filter((n) => !isNaN(n));
+    const ids = idsParam.split(',').map(parsePositiveInt);
+    if (ids.some((n) => n === null)) {
+      res.status(400).json({ error: 'ids must be comma-separated positive integers' });
+      return;
+    }
     try {
       const existing = await getExistingWorkItems(
         { org: auth.org, accessToken: auth.accessToken, projectId },
-        ids
+        ids as number[]
       );
       res.status(200).json({ existing });
     } catch (error) {
@@ -55,8 +62,8 @@ export default async function handler(
     return;
   }
 
-  const workItemId = parseInt(id, 10);
-  if (isNaN(workItemId)) {
+  const workItemId = parsePositiveInt(id);
+  if (workItemId === null) {
     res.status(400).json({ error: 'Invalid work item id' });
     return;
   }

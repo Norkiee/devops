@@ -87,6 +87,39 @@ function seg(value: string): string {
   return encodeURIComponent(value);
 }
 
+// Upper bound on items surfaced in a dropdown. Callers order by ChangedDate DESC,
+// so this keeps the most recently active items when a project is very large.
+const MAX_WORK_ITEMS = 500;
+
+// Fetch id/title/state/type for many work items. Azure's batch endpoint accepts
+// up to 200 ids per call, so chunk to avoid truncating large result sets (the
+// old single-call code silently capped lists at ~50/200).
+async function fetchWorkItemsByIds(
+  opts: AzureApiOptions & { projectId: string },
+  ids: number[]
+): Promise<AzureStory[]> {
+  const results: AzureStory[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const idsParam = ids.slice(i, i + 200).join(',');
+    const response = await azureFetch(
+      `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
+      opts.accessToken
+    );
+    const data = (await response.json()) as {
+      value?: Array<{ id: number; fields: Record<string, string> }>;
+    };
+    for (const wi of data.value || []) {
+      results.push({
+        id: wi.id,
+        title: wi.fields['System.Title'],
+        state: wi.fields['System.State'],
+        type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
+      });
+    }
+  }
+  return results;
+}
+
 // Extract target IDs from WorkItemLinks response, filtering out the source entry
 function extractTargetIds(response: WorkItemRelationsResponse, limit = 50): number[] {
   if (!response.workItemRelations || response.workItemRelations.length === 0) {
@@ -167,17 +200,10 @@ async function azureFetch(
 async function processResponse(response: Response): Promise<Response> {
   if (!response.ok) {
     const errorText = await response.text();
-    // Throw specific error for auth failures so they can be forwarded as 401
-    // Also check for common auth error messages in response body
-    const isAuthError =
-      response.status === 401 ||
-      response.status === 403 ||
-      errorText.toLowerCase().includes('unauthorized') ||
-      errorText.toLowerCase().includes('token') ||
-      errorText.toLowerCase().includes('expired') ||
-      errorText.toLowerCase().includes('invalid_token') ||
-      errorText.toLowerCase().includes('access denied');
-    if (isAuthError) {
+    // Only Azure 401/403 responses are treated as auth failures. Body text is
+    // too noisy for classification: ordinary work item validation errors can
+    // contain words like "token" or Azure codes such as VS403xxx.
+    if (response.status === 401 || response.status === 403) {
       throw new AzureAuthError(
         `Authentication failed (${response.status}): ${errorText}`
       );
@@ -262,29 +288,9 @@ export async function queryStories(
     workItems?: Array<{ id: number }>;
   };
 
-  if (!wiqlData.workItems || wiqlData.workItems.length === 0) {
-    return [];
-  }
-
-  const ids = wiqlData.workItems
-    .slice(0, 50)
-    .map((wi) => wi.id);
-  const idsParam = ids.join(',');
-
-  const detailResponse = await azureFetch(
-    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const detailData = (await detailResponse.json()) as {
-    value: Array<{ id: number; fields: Record<string, string> }>;
-  };
-
-  return detailData.value.map((wi) => ({
-    id: wi.id,
-    title: wi.fields['System.Title'],
-    state: wi.fields['System.State'],
-    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-  }));
+  const ids = (wiqlData.workItems || []).slice(0, MAX_WORK_ITEMS).map((wi) => wi.id);
+  if (ids.length === 0) return [];
+  return fetchWorkItemsByIds(opts, ids);
 }
 
 export async function getTags(
@@ -505,23 +511,8 @@ export async function queryEpics(
     return [];
   }
 
-  const ids = wiqlData.workItems.slice(0, 50).map((wi) => wi.id);
-  const idsParam = ids.join(',');
-
-  const detailResponse = await azureFetch(
-    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const detailData = (await detailResponse.json()) as {
-    value: Array<{ id: number; fields: Record<string, string> }>;
-  };
-
-  return detailData.value.map((wi) => ({
-    id: wi.id,
-    title: wi.fields['System.Title'],
-    state: wi.fields['System.State'],
-    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-  }));
+  const ids = wiqlData.workItems.slice(0, MAX_WORK_ITEMS).map((wi) => wi.id);
+  return fetchWorkItemsByIds(opts, ids);
 }
 
 export async function queryStoriesByEpic(
@@ -554,27 +545,37 @@ export async function queryStoriesByEpic(
   const wiqlData = (await wiqlResponse.json()) as {
     workItems?: Array<{ id: number }>;
   };
-  const ids = (wiqlData.workItems || []).slice(0, 200).map((wi) => wi.id);
-  if (ids.length === 0) {
-    return [];
-  }
+  const ids = (wiqlData.workItems || []).slice(0, MAX_WORK_ITEMS).map((wi) => wi.id);
+  if (ids.length === 0) return [];
+  return fetchWorkItemsByIds(opts, ids);
+}
 
-  const idsParam = ids.join(',');
-
-  const detailResponse = await azureFetch(
-    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const detailData = (await detailResponse.json()) as {
-    value: Array<{ id: number; fields: Record<string, string> }>;
+// Stories whose direct parent is the given feature (open, story-like only).
+export async function queryStoriesByFeature(
+  opts: AzureApiOptions & { projectId: string; featureId: number }
+): Promise<AzureStory[]> {
+  const storyTypesClause = STORY_LIKE_TYPES.map((t) => `'${t}'`).join(', ');
+  const wiqlQuery = {
+    query: `SELECT [System.Id]
+            FROM WorkItems
+            WHERE [System.WorkItemType] IN (${storyTypesClause})
+            AND [System.Parent] = ${opts.featureId}
+            AND [System.State] <> 'Closed'
+            AND [System.State] <> 'Removed'
+            ORDER BY [System.ChangedDate] DESC`,
   };
 
-  return detailData.value.map((wi) => ({
-    id: wi.id,
-    title: wi.fields['System.Title'],
-    state: wi.fields['System.State'],
-    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-  }));
+  const wiqlResponse = await azureFetch(
+    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/wiql?api-version=${AZURE_API_VERSION}`,
+    opts.accessToken,
+    { method: 'POST', body: JSON.stringify(wiqlQuery) }
+  );
+  const wiqlData = (await wiqlResponse.json()) as {
+    workItems?: Array<{ id: number }>;
+  };
+  const ids = (wiqlData.workItems || []).slice(0, MAX_WORK_ITEMS).map((wi) => wi.id);
+  if (ids.length === 0) return [];
+  return fetchWorkItemsByIds(opts, ids);
 }
 
 export interface ExistingWorkItem {
@@ -791,23 +792,8 @@ export async function queryFeatures(
     return [];
   }
 
-  const ids = wiqlData.workItems.slice(0, 50).map((wi) => wi.id);
-  const idsParam = ids.join(',');
-
-  const detailResponse = await azureFetch(
-    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const detailData = (await detailResponse.json()) as {
-    value: Array<{ id: number; fields: Record<string, string> }>;
-  };
-
-  return detailData.value.map((wi) => ({
-    id: wi.id,
-    title: wi.fields['System.Title'],
-    state: wi.fields['System.State'],
-    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-  }));
+  const ids = wiqlData.workItems.slice(0, MAX_WORK_ITEMS).map((wi) => wi.id);
+  return fetchWorkItemsByIds(opts, ids);
 }
 
 export async function queryFeaturesByEpic(
@@ -830,28 +816,9 @@ export async function queryFeaturesByEpic(
     { method: 'POST', body: JSON.stringify(wiqlQuery) }
   );
   const wiqlData = (await wiqlResponse.json()) as WorkItemRelationsResponse;
-  const ids = extractTargetIds(wiqlData);
-
-  if (ids.length === 0) {
-    return [];
-  }
-
-  const idsParam = ids.join(',');
-
-  const detailResponse = await azureFetch(
-    `https://dev.azure.com/${seg(opts.org)}/${seg(opts.projectId)}/_apis/wit/workitems?ids=${idsParam}&fields=System.Id,System.Title,System.State,System.WorkItemType&api-version=${AZURE_API_VERSION}`,
-    opts.accessToken
-  );
-  const detailData = (await detailResponse.json()) as {
-    value: Array<{ id: number; fields: Record<string, string> }>;
-  };
-
-  return detailData.value.map((wi) => ({
-    id: wi.id,
-    title: wi.fields['System.Title'],
-    state: wi.fields['System.State'],
-    type: wi.fields['System.WorkItemType'] as 'Epic' | 'Feature' | 'User Story',
-  }));
+  const ids = extractTargetIds(wiqlData, MAX_WORK_ITEMS);
+  if (ids.length === 0) return [];
+  return fetchWorkItemsByIds(opts, ids);
 }
 
 export async function createEpic(

@@ -2,7 +2,7 @@
 
 Figma plugin that reads a **tasklist frame** and creates each list item as an Azure DevOps **Task** — set to in-progress and assigned to the person running the plugin. No AI. A dedup guard keeps re-runs from creating duplicates, and existing tasks can be **closed** from the Review screen.
 
-This repo was split from the AI-based **TaskScribe** tool (now a separate project). It keeps the original Vercel deployment, Entra/Azure app registration, and Neon database. All Codex/AI generation has been removed.
+This repo was split from the AI-based **TaskScribe** tool (now a separate project). It keeps the original Vercel deployment. The current plugin uses a user-provided Azure DevOps PAT, stored locally in Figma client storage until Disconnect; Entra OAuth and Neon token handoff code have been removed. All Codex/AI generation has been removed.
 
 ## Architecture
 
@@ -19,18 +19,16 @@ plugin/                     # Figma plugin (React + TypeScript)
 │       ├── hooks/         # useFrameSelection, useAzureAuth, usePluginStorage, useAutoResize
 │       └── services/      # api.ts (backend calls), storage.ts
 
-api/                        # Vercel serverless functions (11; Hobby cap is 12)
+api/                        # Vercel serverless functions
 ├── azure/
-│   ├── auth.ts, callback.ts, poll.ts, refresh.ts   # Microsoft Entra OAuth (polling flow)
-│   ├── orgs.ts, projects.ts                         # org/project listing
-│   ├── epics.ts, features.ts, stories.ts            # parent selection lists
+│   ├── projects.ts                                  # project listing + tags/types
+│   ├── epics.ts, features.ts, stories.ts            # parent selection lists (GET only)
 │   ├── tasks.ts                                     # create tasks + close tasks (closeIds)
 │   └── workitem.ts                                  # work item details + batch existence/state check (?ids=)
 └── _lib/
     ├── azure.ts           # Azure DevOps API wrapper (create, state transition, states, existence)
-    ├── auth.ts            # bearer token + CORS
-    ├── db.ts              # Neon Postgres KV (OAuth token handoff only)
-    ├── logger.ts, types.ts
+    ├── auth.ts            # PAT bearer forwarding + CORS
+    └── types.ts
 ```
 
 ## Flow

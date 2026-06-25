@@ -10,6 +10,7 @@ import {
   fetchStories,
   fetchFeaturesByEpic,
   fetchStoriesByEpic,
+  fetchStoriesByFeature,
   fetchWorkItemDetails,
   fetchTags,
 } from '../services/api';
@@ -126,15 +127,10 @@ export function SelectProjectScreen({
         }
       } catch (err) {
         if (isCancelled) return;
-        // Try to refresh token on any error - expired tokens may not always return proper auth errors
         if (isLikelyAuthError(err)) {
           await handleAuthError();
         } else {
-          // For other errors, still try refresh once as fallback
-          const refreshed = await handleAuthError();
-          if (!refreshed) {
-            // If refresh failed, session is expired - onSessionExpired already called
-          }
+          setError(err instanceof Error ? err.message : 'Failed to load projects');
         }
       } finally {
         if (!isCancelled) setLoading(false);
@@ -160,15 +156,10 @@ export function SelectProjectScreen({
         setAvailableTypes(fetchedTypes);
       } catch (err) {
         if (isCancelled) return;
-        // Try to refresh token on any error - expired tokens may not always return proper auth errors
         if (isLikelyAuthError(err)) {
           await handleAuthError();
         } else {
-          // For other errors, still try refresh once as fallback
-          const refreshed = await handleAuthError();
-          if (!refreshed) {
-            // If refresh failed, session is expired - onSessionExpired already called
-          }
+          setError(err instanceof Error ? err.message : 'Failed to load work item types');
         }
       } finally {
         if (!isCancelled) setLoading(false);
@@ -196,35 +187,19 @@ export function SelectProjectScreen({
       setStoryDetails(null);
       setLoading(true);
       try {
-        // For Tasks, load all stories upfront alongside epics
-        const promises: Promise<unknown>[] = [
+        const [fetchedEpics, fetchedTags] = await Promise.all([
           fetchEpics(accessToken, org, projectId),
           fetchTags(accessToken, org, projectId),
-        ];
-        if (workItemType === 'Task') {
-          promises.push(fetchStories(accessToken, org, projectId));
-        }
-
-        const results = await Promise.all(promises);
+        ]);
         if (isCancelled) return;
-
-        const fetchedEpics = results[0] as AzureStory[];
-        const fetchedTags = results[1] as string[];
         setEpics(fetchedEpics);
         setAvailableTags(fetchedTags);
 
-        // For Tasks, set the stories
-        if (workItemType === 'Task' && results[2]) {
-          const fetchedStories = results[2] as AzureStory[];
-          setStories(fetchedStories);
-          // Auto-select saved story if available
-          if (savedStoryId && fetchedStories.some(s => s.id === savedStoryId)) {
-            setStoryId(savedStoryId.toString());
-          }
-        }
+        // Stories are loaded by the dedicated Task stories effect, which keys off
+        // the epic/feature selection — so they aren't fetched here.
 
         // Auto-select saved epic if available
-        if (savedEpicId && fetchedEpics.some(e => e.id === savedEpicId)) {
+        if (savedEpicId && fetchedEpics.some((e) => e.id === savedEpicId)) {
           setEpicId(savedEpicId.toString());
         }
       } catch (err) {
@@ -263,36 +238,23 @@ export function SelectProjectScreen({
         const epicIdNum = parseInt(epicId, 10);
         const detailsPromise = fetchWorkItemDetails(accessToken, org, epicIdNum);
 
-        // Fetch children based on work item type
-        let childrenPromise: Promise<AzureStory[]> | null = null;
-        if (workItemType === 'UserStory' && hasFeatures) {
-          childrenPromise = fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum);
-        } else if (workItemType === 'Task') {
-          // Fetch stories under this epic
-          childrenPromise = fetchStoriesByEpic(accessToken, org, projectId, epicIdNum);
-        }
+        // Fetch the epic's features (the Feature parent/filter) for both the
+        // UserStory and Task flows. Stories under the epic/feature are loaded by
+        // the dedicated stories effect below.
+        const featuresPromise: Promise<AzureStory[]> = hasFeatures
+          ? fetchFeaturesByEpic(accessToken, org, projectId, epicIdNum)
+          : Promise.resolve([]);
 
-        const [fetchedDetails, fetchedChildren] = await Promise.all([
+        const [fetchedDetails, fetchedFeatures] = await Promise.all([
           detailsPromise,
-          childrenPromise,
+          featuresPromise,
         ]);
 
         if (isCancelled) return;
         setEpicDetails(fetchedDetails);
-
-        if (fetchedChildren) {
-          if (workItemType === 'UserStory' && hasFeatures) {
-            setFeatures(fetchedChildren);
-            if (savedFeatureId && fetchedChildren.some(f => f.id === savedFeatureId)) {
-              setFeatureId(savedFeatureId.toString());
-            }
-          } else if (workItemType === 'Task') {
-            // Update stories list to only show those under this epic
-            setStories(fetchedChildren);
-            if (savedStoryId && fetchedChildren.some(s => s.id === savedStoryId)) {
-              setStoryId(savedStoryId.toString());
-            }
-          }
+        setFeatures(fetchedFeatures);
+        if (savedFeatureId && fetchedFeatures.some((f) => f.id === savedFeatureId)) {
+          setFeatureId(savedFeatureId.toString());
         }
       } catch (err) {
         if (isCancelled) return;
@@ -310,33 +272,46 @@ export function SelectProjectScreen({
     return () => { isCancelled = true; };
   }, [accessToken, org, projectId, epicId, workItemType, hasFeatures, savedFeatureId, savedStoryId]);
 
-  // Reload all stories when Epic is cleared for Tasks
+  // Load the Task story list, narrowed by the current selection: a Feature if
+  // chosen, else the Epic, else all project stories. Re-runs whenever the epic
+  // or feature changes.
   useEffect(() => {
-    if (workItemType !== 'Task' || epicId || !org || !projectId) return;
+    if (workItemType !== 'Task' || !org || !projectId) return;
     let isCancelled = false;
 
-    const reloadAllStories = async () => {
-      setEpicDetails(null);
+    const loadStories = async () => {
       setStoryId('');
       setStoryDetails(null);
       setLoading(true);
       try {
-        const fetchedStories = await fetchStories(accessToken, org, projectId);
+        let fetched: AzureStory[];
+        if (featureId) {
+          fetched = await fetchStoriesByFeature(accessToken, org, projectId, parseInt(featureId, 10));
+        } else if (epicId) {
+          fetched = await fetchStoriesByEpic(accessToken, org, projectId, parseInt(epicId, 10));
+        } else {
+          fetched = await fetchStories(accessToken, org, projectId);
+        }
         if (isCancelled) return;
-        setStories(fetchedStories);
+        setStories(fetched);
+        if (savedStoryId && fetched.some((s) => s.id === savedStoryId)) {
+          setStoryId(savedStoryId.toString());
+        }
       } catch (err) {
         if (isCancelled) return;
         if (isLikelyAuthError(err)) {
           await handleAuthError();
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load stories');
         }
       } finally {
         if (!isCancelled) setLoading(false);
       }
     };
 
-    reloadAllStories();
+    loadStories();
     return () => { isCancelled = true; };
-  }, [accessToken, org, projectId, epicId, workItemType]);
+  }, [accessToken, org, projectId, epicId, featureId, workItemType, savedStoryId]);
 
   // Fetch feature details when feature changes
   useEffect(() => {
@@ -479,7 +454,11 @@ export function SelectProjectScreen({
 
   // Determine if selectors should be shown
   const showEpicSelector = projectId && hasEpics && epics.length > 0 && workItemType !== 'Epic';
-  const showFeatureSelector = hasFeatures && workItemType === 'UserStory' && epicId && features.length > 0;
+  const showFeatureSelector =
+    hasFeatures &&
+    (workItemType === 'UserStory' || workItemType === 'Task') &&
+    !!epicId &&
+    features.length > 0;
   // For Tasks, show the User Story selector whenever the project has story-like
   // types — even if the selected epic has none yet, so the control doesn't vanish.
   const showStorySelector = workItemType === 'Task' && hasUserStories;
@@ -570,12 +549,22 @@ export function SelectProjectScreen({
 
         {showFeatureSelector && (
           <Select
+            searchable
             label="Feature (Optional)"
             value={featureId}
-            onChange={setFeatureId}
+            onChange={(val) => {
+              setFeatureId(val);
+              setStoryId('');
+            }}
             placeholder={loading ? 'Loading...' : 'Select a feature (optional)'}
             options={[
-              { value: '', label: '(Create under Epic directly)' },
+              {
+                value: '',
+                label:
+                  workItemType === 'Task'
+                    ? '(All stories under epic)'
+                    : '(Create under Epic directly)',
+              },
               ...features.map((f) => ({
                 value: f.id.toString(),
                 label: `#${f.id} - ${f.title}`,
